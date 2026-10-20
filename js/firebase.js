@@ -23,5 +23,5 @@ export const reiniciarDemo = fb.reiniciarDemo || (() => {});
 // App Check (solo con Firebase real): demuestra que la petición viene de esta página
 export const activarAppCheck = (app, claveSitio) => {
   if (DEMO || !claveSitio) return;
-  fb.initializeAppCheck(app, { provider: new fb.ReCaptchaV3Provider(claveSitio), isTokenAutoRefreshEnabled: true });
+  fb.initializeAppCheck(app, { provider: new fb.ReCaptchaEnterpriseProvider(claveSitio), isTokenAutoRefreshEnabled: true });
 };

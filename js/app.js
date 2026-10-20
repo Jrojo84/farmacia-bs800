@@ -6,11 +6,11 @@ import {
 } from "./firebase.js";
 import {
   firebaseConfig, ADMIN_USUARIO, DOMINIO, MES_INICIO, DIA_CIERRE, STOCK_BAJO, DIAS_POR_VENCER,
-  VIAS, PRESENTACIONES, GRADOS, RECAPTCHA_V3,
+  VIAS, PRESENTACIONES, GRADOS, RECAPTCHA_ENTERPRISE,
 } from "./config.js";
 
 const app = initializeApp(firebaseConfig);
-activarAppCheck(app, RECAPTCHA_V3);
+activarAppCheck(app, RECAPTCHA_ENTERPRISE);
 const auth = getAuth(app);
 const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 // Cloud Function del administrador para poner una contraseña temporal (functions/index.js)
@@ -18,7 +18,7 @@ const restablecerClave = httpsCallable(getFunctions(app), "restablecerClave");
 
 // Segunda instancia: crea cuentas en el registro sin tocar la sesión principal.
 const appSecundaria = initializeApp(firebaseConfig, "secundaria");
-activarAppCheck(appSecundaria, RECAPTCHA_V3); // el registro también pasa por App Check
+activarAppCheck(appSecundaria, RECAPTCHA_ENTERPRISE); // el registro también pasa por App Check
 const authSecundaria = getAuth(appSecundaria);
 const dbSecundaria = getFirestore(appSecundaria);
 
