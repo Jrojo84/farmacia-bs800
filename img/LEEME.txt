@@ -1,0 +1,7 @@
+Coloca aquí los 3 escudos (PNG con fondo transparente, idealmente cuadrados de 512x512):
+
+  logo-aviacion.png   → escudo de Aviación del Ejército
+  logo-bs800.png      → escudo del BS N° 800
+  logo-sanidad.png    → escudo de Sanidad (también es el ícono de la app)
+
+Si falta alguno, la app muestra "AE" / "800" / "SAN" en su lugar.

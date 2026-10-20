@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f3d2b">
+  <title>Farmacia de la Aviación del Ejército · BS N° 800</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="img/logo-sanidad.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ============ INICIO DE SESIÓN / REGISTRO ============ -->
+  <section id="vista-login" class="login">
+    <header class="encabezado">
+      <img class="escudo" src="img/logo-bs800.png" alt="BS N° 800" data-fallback="BS 800">
+      <div class="titulo">
+        <h1>FARMACIA DE LA AVIACIÓN DEL EJÉRCITO</h1>
+        <p>BS N° 800</p>
+        <p>CIA SAN</p>
+      </div>
+      <img class="escudo" src="img/logo-aviacion.png" alt="Aviación del Ejército" data-fallback="AE">
+    </header>
+
+    <div class="login-cuerpo">
+      <form id="form-login" class="tarjeta" autocomplete="on">
+        <h2>Iniciar sesión</h2>
+        <label>Usuario
+          <input id="login-usuario" type="text" autocapitalize="none" autocomplete="username" required>
+        </label>
+        <label>Contraseña
+          <span class="campo-clave"><input id="login-clave" type="password" autocomplete="current-password" required><button type="button" class="ver-clave" data-ver-clave aria-label="Mostrar contraseña">👁</button></span>
+        </label>
+        <button class="btn primario grande" type="submit">Ingresar</button>
+        <p id="login-error" class="error"></p>
+        <p class="cambiar"><a href="#" data-ir="recuperar">¿Olvidaste tu contraseña?</a></p>
+        <p class="cambiar">¿No tienes cuenta? <a href="#" data-ir="registro">Solicitar registro</a></p>
+      </form>
+
+      <form id="form-recuperar" class="tarjeta oculto" autocomplete="off" novalidate>
+        <h2>Recuperar contraseña</h2>
+        <p class="nota centro">El administrador te enviará una contraseña temporal por WhatsApp a tu celular registrado.</p>
+        <label>Usuario<input id="rec-usuario" autocapitalize="none" autocomplete="username"></label>
+        <label>DNI<input id="rec-dni" class="entero" type="text" inputmode="numeric" maxlength="8"></label>
+        <button class="btn primario grande" type="submit">Enviar solicitud</button>
+        <p id="rec-msg" class="error"></p>
+        <p class="cambiar"><a href="#" data-ir="login">Volver a iniciar sesión</a></p>
+      </form>
+
+      <form id="form-registro" class="tarjeta oculto" autocomplete="on">
+        <h2>Solicitud de registro</h2>
+        <label>Grado, nombres y apellidos<input id="r-nombre" autocomplete="name" required></label>
+        <div class="fila">
+          <label>DNI<input id="r-dni" class="entero" type="text" inputmode="numeric" maxlength="8" required></label>
+          <label>Celular<input id="r-celular" class="entero" type="text" inputmode="numeric" maxlength="9" required></label>
+        </div>
+        <label>Usuario<input id="r-usuario" autocapitalize="none" autocomplete="username" pattern="[a-zA-Z0-9._\-]+" title="Solo letras, números, punto, guion" required></label>
+        <div class="fila">
+          <label>Contraseña<span class="campo-clave"><input id="r-clave" type="password" minlength="6" autocomplete="new-password" required><button type="button" class="ver-clave" data-ver-clave aria-label="Mostrar contraseña">👁</button></span></label>
+          <label>Repetir contraseña<span class="campo-clave"><input id="r-clave2" type="password" minlength="6" autocomplete="new-password" required><button type="button" class="ver-clave" data-ver-clave aria-label="Mostrar contraseña">👁</button></span></label>
+        </div>
+        <button class="btn primario grande" type="submit">Enviar solicitud de registro</button>
+        <p id="registro-msg" class="error"></p>
+        <p class="cambiar">¿Ya tienes cuenta? <a href="#" data-ir="login">Iniciar sesión</a></p>
+      </form>
+    </div>
+
+    <footer class="pie-pagina">Derechos Reservados · Rojo - 2026 · Callao</footer>
+  </section>
+
+  <!-- ============ APP ============ -->
+  <section id="vista-app" class="app oculto">
+
+    <!-- Barra superior: BS a la izquierda, título al centro, Aviación a la derecha -->
+    <header class="barra-superior">
+      <img class="escudo" src="img/logo-bs800.png" alt="BS N° 800" data-fallback="BS 800">
+      <div class="titulo">
+        <h1>FARMACIA DE LA AVIACIÓN DEL EJÉRCITO</h1>
+        <p>BS N° 800 · CIA SAN</p>
+      </div>
+      <img class="escudo" src="img/logo-aviacion.png" alt="Aviación del Ejército" data-fallback="AE">
+    </header>
+
+    <!-- Menú lateral fijo -->
+    <aside class="lateral">
+      <!-- Usuario que ingresó (la foto se cambia en Usuarios) -->
+      <div class="perfil">
+        <div id="perfil-foto" class="avatar"></div>
+        <input id="input-foto" type="file" accept="image/*" hidden>
+        <div id="usuario-actual" class="perfil-nombre"></div>
+      </div>
+      <nav class="menu">
+        <button data-sec="despacho" class="activa"><span class="ico">💊</span><span>Despacho</span></button>
+        <button data-sec="ingreso" class="solo-admin"><span class="ico">📦</span><span>Ingreso</span></button>
+        <button data-sec="control"><span class="ico">📊</span><span>Control visible</span></button>
+        <button data-sec="movimientos"><span class="ico">📋</span><span>Movimientos</span></button>
+        <button data-sec="usuarios"><span class="ico">👤</span><span>Usuarios</span><i id="badge-pendientes" class="badge oculto"></i></button>
+      </nav>
+      <button id="btn-salir" class="btn salir"><span class="ico">⎋</span><span>Salir</span></button>
+    </aside>
+
+    <main class="contenido">
+      <!-- DESPACHO -->
+      <div id="sec-despacho" class="seccion">
+        <h2 class="titulo-sec">Despacho</h2>
+        <div id="despacho-curso"></div>
+        <div class="barra-busqueda">
+          <input id="buscar-despacho" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar medicamento…">
+        </div>
+        <div id="lista-despacho"></div>
+      </div>
+
+      <!-- INGRESO (solo admin) -->
+      <div id="sec-ingreso" class="seccion oculto">
+        <h2 class="titulo-sec">Ingreso</h2>
+        <div class="acciones">
+          <button id="btn-nuevo-med" class="btn">+ Nuevo medicamento</button>
+        </div>
+        <div class="barra-busqueda">
+          <input id="buscar-ingreso" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar el medicamento a ingresar…">
+        </div>
+        <div id="lista-ingreso"></div>
+      </div>
+
+      <!-- CONTROL VISIBLE -->
+      <div id="sec-control" class="seccion oculto">
+        <h2 class="titulo-sec">Control visible</h2>
+        <div class="barra-busqueda">
+          <input id="buscar-control" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar medicamento…">
+        </div>
+        <div id="lista-control"></div>
+      </div>
+
+      <!-- MOVIMIENTOS -->
+      <div id="sec-movimientos" class="seccion oculto">
+        <h2 class="titulo-sec">Movimientos</h2>
+        <div class="barra-busqueda fila">
+          <select id="mov-periodo" aria-label="Mes"></select>
+          <input id="buscar-mov" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Medicamento, paciente, DNI, acta…">
+          <button id="btn-pdf" class="btn primario">Descargar PDF</button>
+        </div>
+        <p id="mov-rango" class="nota"></p>
+        <div id="mov-totales" class="totales"></div>
+        <div id="lista-movimientos"></div>
+      </div>
+
+      <!-- USUARIOS -->
+      <div id="sec-usuarios" class="seccion oculto">
+        <h2 class="titulo-sec">Usuarios</h2>
+        <div id="lista-usuarios"></div>
+      </div>
+    </main>
+
+    <footer class="pie-pagina fijo">Derechos Reservados · Rojo - 2026 · Callao</footer>
+  </section>
+
+  <!-- ============ MODAL genérico ============ -->
+  <div id="modal" class="modal oculto">
+    <div class="modal-caja">
+      <div class="modal-cab">
+        <h3 id="modal-titulo"></h3>
+        <button class="btn icono" data-cerrar>✕</button>
+      </div>
+      <div id="modal-cuerpo"></div>
+    </div>
+  </div>
+
+  <!-- Mensaje grande de confirmación -->
+  <div id="exito" class="exito oculto"><div><span>✔</span><p id="exito-msg"></p></div></div>
+
+  <div id="toast" class="toast oculto"></div>
+  <!-- Avisos abajo (vencimientos, deshacer) -->
+  <div id="avisos" class="avisos"></div>
+
+  <script>
+    // Si falta un escudo en img/, muestra sus iniciales
+    document.querySelectorAll("img[data-fallback]").forEach((img) => {
+      const cambiar = () => img.replaceWith(Object.assign(document.createElement("div"), { className: img.className + " logo-fallback", textContent: img.dataset.fallback }));
+      img.complete && !img.naturalWidth ? cambiar() : img.addEventListener("error", cambiar);
+    });
+  </script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "Farmacia Sanidad - Aviación del Ejército",
+  "short_name": "Farmacia",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f4f1",
+  "theme_color": "#1f3d2b",
+  "icons": [
+    { "src": "img/logo-sanidad.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

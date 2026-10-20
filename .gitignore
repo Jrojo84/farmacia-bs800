@@ -1,0 +1,12 @@
+# Datos reales de la farmacia: NUNCA se suben a GitHub (viven en Firebase)
+datos-privados/
+*.xlsx
+*.xls
+*.csv
+*.ods
+
+# Dependencias y archivos de herramientas
+node_modules/
+functions/node_modules/
+.firebase/
+.DS_Store
