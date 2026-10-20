@@ -11,6 +11,10 @@ export const firebaseConfig = {
   appId: "1:925170632967:web:642e55a2ac54bec9265da2",
 };
 
+// App Check: clave del sitio de reCAPTCHA v3 (es pública; la secreta va solo en Firebase).
+// Hace que Firebase solo acepte peticiones que vengan de esta página.
+export const RECAPTCHA_V3 = "6LftkfctAAAAAOcU3Q3r78aUo3nTYFv63T7IW_xF";
+
 // Usuario administrador (tú). Debe coincidir con firestore.rules.
 export const ADMIN_USUARIO = "admin";
 

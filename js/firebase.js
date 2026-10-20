@@ -5,7 +5,7 @@ export const DEMO = firebaseConfig.apiKey === "PEGAR_AQUI";
 
 async function cargarFirebase() {
   const base = "https://www.gstatic.com/firebasejs/10.12.2/";
-  const mods = await Promise.all(["firebase-app.js", "firebase-auth.js", "firebase-firestore.js", "firebase-functions.js"].map((f) => import(base + f)));
+  const mods = await Promise.all(["firebase-app.js", "firebase-auth.js", "firebase-firestore.js", "firebase-functions.js", "firebase-app-check.js"].map((f) => import(base + f)));
   return Object.assign({}, ...mods);
 }
 
@@ -19,3 +19,9 @@ export const {
 } = fb;
 
 export const reiniciarDemo = fb.reiniciarDemo || (() => {});
+
+// App Check (solo con Firebase real): demuestra que la petición viene de esta página
+export const activarAppCheck = (app, claveSitio) => {
+  if (DEMO || !claveSitio) return;
+  fb.initializeAppCheck(app, { provider: new fb.ReCaptchaV3Provider(claveSitio), isTokenAutoRefreshEnabled: true });
+};
