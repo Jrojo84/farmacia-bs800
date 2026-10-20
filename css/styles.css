@@ -47,6 +47,8 @@ input, select {
   background: #fff;
   color: var(--texto);
 }
+/* 16 px como mínimo: con menos, el iPhone amplía la página al tocar un campo y la deja ampliada */
+input, select, textarea { font-size: 16px; }
 input:focus, select:focus { outline: 2px solid var(--verde-2); border-color: transparent; }
 /* Mismo alto para campos y listas (en celular las listas salían delgadas) */
 input:not([type=file]):not([type=checkbox]), select { min-height: 48px; }
