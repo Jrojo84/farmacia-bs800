@@ -1504,7 +1504,13 @@ const MENSAJES_AUTH = {
   "auth/weak-password": "La contraseña debe tener al menos 6 caracteres",
   "auth/invalid-email": "Usuario no válido (solo letras, números, punto o guion)",
   "auth/network-request-failed": "Sin conexión a internet",
+  "auth/too-many-requests": "Demasiados intentos. Espera unos minutos e inténtalo de nuevo",
+  "auth/user-disabled": "Esta cuenta está desactivada",
 };
+/** Mensaje para el usuario; si la página no está autorizada en Firebase, lo dice claramente. */
+const mensajeAuth = (err, porDefecto) =>
+  /blocked|unauthorized-domain|api-key/.test(err?.code || "") ? "Esta página no está autorizada para conectarse. Avisa al administrador."
+    : MENSAJES_AUTH[err?.code] || porDefecto;
 
 $("form-registro").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1539,7 +1545,7 @@ $("form-registro").addEventListener("submit", async (e) => {
     $("login-error").textContent = "Solicitud enviada ✔. Podrás ingresar cuando el administrador la apruebe.";
   } catch (err) {
     msg.className = "error";
-    msg.textContent = MENSAJES_AUTH[err.code] || err.message;
+    msg.textContent = mensajeAuth(err, err.message);
   } finally {
     btn.disabled = false;
   }
@@ -1552,7 +1558,7 @@ $("form-login").addEventListener("submit", async (e) => {
   try {
     await signInWithEmailAndPassword(auth, correoDe($("login-usuario").value), $("login-clave").value);
   } catch (err) {
-    $("login-error").textContent = MENSAJES_AUTH[err.code] || "Usuario o contraseña incorrectos";
+    $("login-error").textContent = mensajeAuth(err, "Usuario o contraseña incorrectos");
   }
 });
 // 👁 muestra u oculta la contraseña
