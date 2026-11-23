@@ -34,6 +34,13 @@ service cloud.firestore {
       allow read, delete: if esAdmin();
     }
 
+    // Balances (Excel de saldos) guardados en el sistema: los ve cualquier
+    // usuario activo; solo el administrador los agrega, cambia o elimina.
+    match /saldos/{id} {
+      allow read: if activo();
+      allow create, update, delete: if esAdmin();
+    }
+
     match /medicamentos/{id} {
       allow read: if activo();
       allow create, delete: if esAdmin();

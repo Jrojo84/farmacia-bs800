@@ -273,6 +273,9 @@ const ACCION = {
   control: { titulo: "Control", boton: () => `<button class="btn ver" data-accion>Ver</button>` },
 };
 
+// "¿Quisiste decir…?" se puede cerrar; vuelve a salir al borrar la búsqueda
+const avisoCerrado = { despacho: false, ingreso: false, control: false };
+
 // Tablas por páginas para que carguen rápido aunque haya muchos medicamentos
 const POR_PAGINA = 20;
 const pagina = { despacho: 1, ingreso: 1, control: 1 };
@@ -337,7 +340,7 @@ function pintarTablaMeds(sec) {
     }).join("");
   }).join("");
   cont.innerHTML =
-    (aproximado ? `<p class="nota">No hay coincidencia exacta. ¿Quisiste decir…?</p>` : "") +
+    (aproximado && !avisoCerrado[sec] ? `<p class="nota aviso-cerrable">No hay coincidencia exacta. ¿Quisiste decir…?<button class="cerrar-aviso" data-cerrar-aviso title="Cerrar" aria-label="Cerrar">✕</button></p>` : "") +
     `<div class="tabla-wrap"><table class="tabla meds ${sec}">
       <thead><tr><th>N°</th><th>Medicamento</th><th class="col-pres">Presentación</th>
         <th>F. caducidad</th><th class="num">Stock actual</th><th class="accion">${a.titulo}</th></tr></thead>
@@ -347,8 +350,9 @@ function pintarTablaMeds(sec) {
 
 const ABRIR = { despacho: abrirDespacho, ingreso: abrirIngreso, control: (m) => abrirControl(m) };
 for (const sec of ["despacho", "ingreso", "control"]) {
-  $(`buscar-${sec}`).addEventListener("input", () => { pagina[sec] = 1; pintarTablaMeds(sec); });
+  $(`buscar-${sec}`).addEventListener("input", (e) => { pagina[sec] = 1; if (!e.target.value.trim()) avisoCerrado[sec] = false; pintarTablaMeds(sec); });
   $(`lista-${sec}`).addEventListener("click", (e) => {
+    if (e.target.closest("[data-cerrar-aviso]")) { avisoCerrado[sec] = true; return pintarTablaMeds(sec); }
     const p = e.target.closest("[data-pag]");
     if (p) {
       if (p.disabled) return;
@@ -753,7 +757,7 @@ function abrirCorregir(mv) {
       </div>
     </div>
     <form id="f-corr" novalidate>
-      <label>N° de acta de entrega<input id="corr-acta" value="${esc(actaVigente)}" autocomplete="off"></label>
+      <label>N° Acta de Entrega<input id="corr-acta" value="${esc(actaVigente)}" autocomplete="off"></label>
       <label>Cantidad correcta del ingreso${campoEntero("corr-cant", `value="${vigente}" maxlength="6"`)}</label>
       <p class="nota">${minimo ? `Ya se despacharon ${minimo} de este ingreso: la cantidad no puede ser menor que ${minimo}.` : "Puedes poner la cantidad correcta."}</p>
       <p id="corr-error" class="error"></p>
@@ -769,7 +773,7 @@ function abrirCorregir(mv) {
     const acta = c.querySelector("#corr-acta").value.trim();
     if (!(nueva >= 0)) return err("Escribe la cantidad correcta");
     if (nueva < minimo) return err(`No puede ser menor que ${minimo} (ya despachados)`);
-    if (!acta) return err("Escribe el N° de acta");
+    if (!acta) return err("Escribe el N° Acta de Entrega");
     const delta = nueva - vigente;
     if (!delta && acta === actaVigente) return err("No hay cambios");
     const u = estado.usuario;
@@ -901,7 +905,7 @@ function abrirIngreso(m, venc) {
   const c = abrirModal("Ingreso", `
     ${fichaLote(m, venc, m.stock ?? 0)}
     <form id="f-ing" novalidate>
-      <label>N° de acta de entrega<input id="ing-acta" autocomplete="off"></label>
+      <label>N° Acta de Entrega<input id="ing-acta" autocomplete="off"></label>
       <label>Cantidad ingreso${campoEntero("ing-cant", 'maxlength="6"')}</label>
       <div class="campo">Fecha de caducidad <small>(sin día = fin de mes)</small>${campoFecha("ing-venc", venc ?? "")}</div>
       <p id="ing-aviso"></p>
@@ -936,7 +940,7 @@ function abrirIngreso(m, venc) {
     const err = (msg) => { c.querySelector("#ing-error").textContent = msg; };
     const acta = c.querySelector("#ing-acta").value.trim();
     const n = parseInt(cant.value, 10);
-    if (!acta) return err("Escribe el N° de acta de entrega");
+    if (!acta) return err("Escribe el N° Acta de Entrega");
     if (!(n > 0)) return err("Escribe la cantidad que ingresa");
     if (!vencInp.value) return err("Indica el mes y el año de caducidad");
     if (vencInp.value < hoyISO()) return err("La fecha de caducidad no puede ser anterior a hoy");
@@ -973,8 +977,8 @@ function abrirFormMed() {
       </div>
       <p class="subtitulo">Stock inicial</p>
       <div class="fila">
-        <label>Cantidad${campoEntero("med-cant", 'name="stock" value="0" maxlength="6"')}</label>
-        <label class="si-stock">N° de acta<input name="acta" autocomplete="off"></label>
+        <label>Cantidad${campoEntero("med-cant", 'name="stock" placeholder="0" maxlength="6"')}</label>
+        <label class="si-stock">N° Acta de Entrega<input name="acta" autocomplete="off"></label>
       </div>
       <div class="campo si-stock">Fecha de caducidad <small>(sin día = fin de mes)</small>${campoFecha("med-venc")}</div>
       <p class="nota">Revisa bien los datos: una vez creado, el medicamento no se puede modificar.</p>
@@ -992,17 +996,18 @@ function abrirFormMed() {
   const cantInp = c.querySelector("#med-cant");
   const verStock = () => c.querySelectorAll(".si-stock").forEach((l) => l.classList.toggle("oculto", !(parseInt(cantInp.value, 10) > 0)));
   cantInp.addEventListener("input", verStock);
-  cantInp.addEventListener("blur", () => { if (cantInp.value === "") { cantInp.value = "0"; verStock(); } });
   verStock();
 
   // Medicamentos que ya existen con ese nombre
   const existentes = c.querySelector("#med-existentes");
+  let parecidosCerrado = false;
   nombre.addEventListener("input", () => {
     const q = nombre.value.trim();
-    if (q.length < 2) { existentes.innerHTML = ""; return; }
+    if (q.length < 2) { existentes.innerHTML = ""; parecidosCerrado = false; return; }
     const { lista, aproximado } = buscar(q);
-    existentes.innerHTML = !lista.length ? "" : `
+    existentes.innerHTML = !lista.length || (aproximado && parecidosCerrado) ? "" : `
       <div class="existentes">
+        <button type="button" class="cerrar-aviso" data-cerrar-parecidos title="Cerrar" aria-label="Cerrar">✕</button>
         <p>${aproximado ? "¿Quisiste decir…? Estos se parecen:" : "Ya registrados:"}</p>
         ${lista.slice(0, 6).map((m) => `
           <div class="existente">
@@ -1013,6 +1018,7 @@ function abrirFormMed() {
       </div>`;
   });
   existentes.addEventListener("click", (e) => {
+    if (e.target.closest("[data-cerrar-parecidos]")) { parecidosCerrado = true; existentes.innerHTML = ""; return nombre.focus(); }
     const id = e.target.closest("[data-ingresar]")?.dataset.ingresar;
     if (id) { const m = medPorId(id); abrirIngreso(m, lotesDe(m)[0]?.venc ?? null); }
   });
@@ -1028,7 +1034,7 @@ function abrirFormMed() {
     if (!pres) return err("Elige la presentación");
     const igual = estado.meds.find((m) => norm(m.nombre) === norm(datos.nombre) && (m.unidad || "") === datos.unidad);
     if (igual) return err(`Ya existe ${igual.nombre} (${presDe(igual)}). Usa "Ingresar stock".`);
-    if (cant && !d.acta.trim()) return err("Escribe el N° de acta del stock inicial");
+    if (cant && !d.acta.trim()) return err("Escribe el N° Acta de Entrega del stock inicial");
     d.venc = leerFecha(c.querySelector("#med-venc"));
     if (cant && !d.venc) return err("Indica el mes y el año de caducidad del stock inicial");
     if (cant && d.venc < hoyISO()) return err("La fecha de caducidad no puede ser anterior a hoy");
@@ -1206,7 +1212,7 @@ function pintarMovimientos() {
   let diaPrevio = "";
   $("lista-movimientos").innerHTML = `<div class="tabla-wrap"><table class="tabla movimientos">
     <thead><tr><th class="num">N°</th><th>Fecha</th><th>Hora</th><th>Movimiento</th><th>Medicamento</th><th>Vence</th>
-      <th class="num">Cantidad</th><th class="num">Saldo</th><th>Responsable</th><th>Paciente</th><th>Acta de entrega</th></tr></thead>
+      <th class="num">Cantidad</th><th class="num">Saldo</th><th>Responsable</th><th>Paciente</th><th>N° Acta de Entrega</th></tr></thead>
     <tbody>${movs.map((x) => {
       const [dia, hora] = fechaHora(x);
       const nuevoDia = dia !== diaPrevio; diaPrevio = dia;
@@ -1303,7 +1309,7 @@ const LIB_PDF = [
 function cargarScript(src) {
   return new Promise((ok, mal) => {
     const s = Object.assign(document.createElement("script"), { src, onload: ok });
-    s.onerror = () => mal(new Error("No se pudo cargar el generador de PDF. Revisa la conexión a internet."));
+    s.onerror = () => mal(new Error(src.includes("xlsx") ? "No se pudo cargar el lector de Excel. Revisa la conexión a internet." : "No se pudo cargar el generador de PDF. Revisa la conexión a internet."));
     document.head.append(s);
   });
 }
@@ -1419,7 +1425,7 @@ async function pdfMedicamento(m, P) {
   tabla({
     startY: pdf.lastAutoTable.finalY + 10,
     head: [[{ content: `Movimientos de ${periodoNombre(P)}`, colSpan: 10, styles: { halign: "left" } }],
-      ["N°", "Fecha", "Hora", "Movimiento", "F. caducidad", "Cantidad", "Saldo", "Responsable", "Paciente", "Acta de entrega"]],
+      ["N°", "Fecha", "Hora", "Movimiento", "F. caducidad", "Cantidad", "Saldo", "Responsable", "Paciente", "N° Acta de Entrega"]],
     body: movs.length ? movs.map((x) => {
       const [dia, hora] = fechaHora(x);
       const ingreso = x.tipo === "ingreso";
@@ -1718,6 +1724,267 @@ function abrirEditarUsuario(u) {
 }
 
 // =====================================================================
+//  BALANCES (SALDOS): cada balance es el Excel que sube el administrador.
+//  Queda guardado en el sistema (Firebase) y todos lo ven y lo descargan.
+//  Se guarda el archivo original tal cual; por eso la descarga sale
+//  EXACTAMENTE en el mismo formato que se subió.
+// =====================================================================
+const LIB_XLSX = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const MAX_BALANCE = 700 * 1024; // Firestore guarda ~1 MB por registro; el Excel debe ser menor
+
+const txt = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
+const numOVacio = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
+
+/** Fecha de Excel (número de serie o texto) → "MM/AAAA" (las caducidades son por mes). */
+function mesAnio(v) {
+  if (v === null || v === undefined || v === "") return { texto: "", iso: "" };
+  if (typeof v === "number") {
+    const f = XLSX.SSF.parse_date_code(v);
+    if (f) {
+      const mm = String(f.m).padStart(2, "0");
+      return { texto: `${mm}/${f.y}`, iso: `${f.y}-${mm}-${String(f.d).padStart(2, "0")}` };
+    }
+  }
+  return { texto: txt(v), iso: "" };
+}
+
+/** Lee una hoja con el formato "SALDO DE MEDICINAS…" y devuelve sus filas por categoría. */
+function leerHojaSaldo(nombre, ws) {
+  const filas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+  const iCab = filas.findIndex((r) => r.some((c) => /DESCRIP/i.test(String(c ?? ""))));
+  if (iCab < 0) return null;
+  const titulo = txt(filas.slice(0, iCab).flat().find((c) => /SALDO/i.test(String(c ?? ""))));
+  const cats = [];
+  for (const r of filas.slice(iCab + 2)) {
+    const [n, desc, carac, um, venc, ant, docE, cantE, docS, cantS, saldo] = r;
+    if (!txt(desc)) continue;
+    const esCategoria = (n === null || n === "") && !txt(um) && /^[A-Z]\.\s/.test(txt(desc));
+    if (esCategoria || !cats.length) cats.push({ nombre: esCategoria ? txt(desc) : "Sin categoría", items: [] });
+    if (esCategoria) continue;
+    cats.at(-1).items.push({
+      n: txt(n), desc: txt(desc), carac: txt(carac), um: txt(um), venc: mesAnio(venc),
+      ant: numOVacio(ant), docE: txt(docE), cantE: numOVacio(cantE), docS: txt(docS), cantS: numOVacio(cantS), saldo: numOVacio(saldo),
+    });
+  }
+  // Aviso si el título dice otro mes que el nombre de la hoja (p. ej. hoja "mayo" con título "JUNIO")
+  const MESES_L = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SETIEMBRE", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+  const mesHoja = MESES_L.find((m) => norm(nombre).toUpperCase().includes(m));
+  const mesTitulo = MESES_L.find((m) => norm(titulo).toUpperCase().includes(m));
+  const aviso = mesHoja && mesTitulo && mesHoja !== mesTitulo ? `La hoja se llama "${nombre}" pero su título dice ${mesTitulo}. Revisa si es la hoja correcta.` : "";
+  return { nombre, titulo, aviso, cats };
+}
+
+const celNum = (v) => (v === null || Number.isNaN(v) ? "" : v);
+
+// Pasar el archivo a texto (base64) para guardarlo y, al descargar, de vuelta a archivo.
+function bytesABase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function base64ABytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+let balances = [];                                   // [{ id, nombre, meses, tamano, por, subido, b64 }]
+const vista = { id: null, nombre: "", hojas: [], hoja: 0 }; // balance abierto en pantalla
+
+const fmtFecha = (ts) => { try { return ts?.toDate?.().toLocaleDateString("es-PE") || ""; } catch { return ""; } };
+
+/** Sube un Excel como nuevo balance al sistema (solo administrador). */
+async function subirBalance(file) {
+  try {
+    if (file.size > MAX_BALANCE) return toast(`El archivo pesa ${Math.round(file.size / 1024)} KB; el máximo es ${Math.round(MAX_BALANCE / 1024)} KB.`, true);
+    if (!window.XLSX) await cargarScript(LIB_XLSX);
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+    const hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+    if (!hojas.length) return toast("El archivo no tiene el formato de saldos (falta la columna DESCRIPCIÓN ARTÍCULO)", true);
+    toast("Guardando balance en el sistema…");
+    const ref = doc(collection(db, "saldos"));
+    await setDoc(ref, {
+      nombre: file.name,
+      meses: hojas.map((h) => h.nombre),
+      tamano: file.size,
+      por: estado.usuario?.nombre || "",
+      b64: bytesABase64(buf),
+      subido: serverTimestamp(),
+    });
+    vista.id = ref.id; vista.hoja = 0; vista.hojas = []; vista.nombre = file.name;
+    toast(`Balance guardado: ${file.name}`);
+  } catch (er) {
+    toast(er.code === "permission-denied"
+      ? "Solo el administrador puede agregar balances (o faltan los permisos en Firebase)."
+      : (er.message?.includes("conexión") ? "No se pudo cargar el lector de Excel. Revisa la conexión a internet." : "No se pudo leer o guardar el archivo. ¿Es un Excel (.xlsx)?"), true);
+  }
+}
+
+/** Abre un balance: lee su Excel guardado y lo muestra en la tabla. */
+async function abrirBalance(id) {
+  const b = balances.find((x) => x.id === id);
+  if (!b) return;
+  vista.id = id; vista.nombre = b.nombre; vista.hoja = 0; vista.hojas = [];
+  $("lista-saldos").innerHTML = `<p class="vacio">Abriendo ${esc(b.nombre)}…</p>`;
+  try {
+    if (!window.XLSX) await cargarScript(LIB_XLSX);
+    const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
+    vista.hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+  } catch {
+    toast("No se pudo abrir el balance.", true);
+  }
+  if (estado.seccion === "saldos") pintarSaldos();
+}
+
+/** Descarga el balance tal cual se subió (mismo archivo, mismo formato). */
+function descargarBalance(id) {
+  const b = balances.find((x) => x.id === id);
+  if (!b) return;
+  const blob = new Blob([base64ABytes(b.b64)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: b.nombre });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function eliminarBalance(id) {
+  const b = balances.find((x) => x.id === id);
+  if (!b || !confirm(`¿Eliminar el balance "${b.nombre}" del sistema? Esto lo quita para todos.`)) return;
+  try {
+    await deleteDoc(doc(db, "saldos", id));
+    if (vista.id === id) { vista.id = null; vista.hojas = []; }
+    toast("Balance eliminado");
+  } catch (er) {
+    toast(er.code === "permission-denied" ? "Solo el administrador puede eliminar balances." : "No se pudo eliminar.", true);
+  }
+}
+
+/** Muestra el balance tal cual se ve en Excel (grilla con sus columnas). */
+async function verBalanceExcel(id) {
+  const b = balances.find((x) => x.id === id);
+  if (!b) return;
+  try {
+    if (!window.XLSX) await cargarScript(LIB_XLSX);
+    const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
+    const hojas = wb.SheetNames;
+    const chips = hojas.map((n, i) => `<button class="btn chip" data-vex="${i}">${esc(n.toUpperCase())}</button>`).join("");
+    const c = abrirModal(b.nombre, `<p class="nota">Así se ve en Excel. Para editarlo, descarga el archivo.</p>
+      <div id="vex-chips" class="chips">${chips}</div>
+      <div id="vex-grid" class="excel-grid"></div>`, true);
+    const pintar = (i) => {
+      c.querySelector("#vex-grid").innerHTML = XLSX.utils.sheet_to_html(wb.Sheets[hojas[i]]);
+      c.querySelectorAll("#vex-chips .chip").forEach((x, k) => x.classList.toggle("activa", k === i));
+    };
+    c.querySelector("#vex-chips").addEventListener("click", (e) => {
+      const x = e.target.closest("[data-vex]");
+      if (x) pintar(+x.dataset.vex);
+    });
+    pintar(0);
+  } catch {
+    toast("No se pudo abrir el visor de Excel.", true);
+  }
+}
+
+function pintarSaldos() {
+  // La lista de balances guardados en el sistema
+  const abierto = vista.id && balances.find((b) => b.id === vista.id);
+  $("saldos-lista").innerHTML = balances.length
+    ? balances.map((b) => `
+        <div class="balance-item${b.id === vista.id ? " abierto" : ""}">
+          <button class="balance-abrir" data-abrir="${b.id}">
+            <span class="bal-nombre">📑 ${esc(b.nombre)}</span>
+            <small>${(b.meses || []).length} mes(es)${b.por ? ` · subió ${esc(b.por)}` : ""}${fmtFecha(b.subido) ? ` · ${fmtFecha(b.subido)}` : ""}</small>
+          </button>
+          <span class="balance-acc">
+            <button class="btn mini" data-ver="${b.id}">👁 Ver en Excel</button>
+            <button class="btn mini" data-descargar="${b.id}">⬇ Descargar</button>
+            <button class="btn mini peligro solo-admin" data-eliminar="${b.id}">Eliminar</button>
+          </span>
+        </div>`).join("")
+    : `<p class="vacio">Aún no hay balances en el sistema.<br><small>El administrador los agrega con “Agregar nuevo balance”.</small></p>`;
+
+  const cont = $("lista-saldos");
+  if (!abierto) {
+    $("saldos-hojas").innerHTML = "";
+    $("buscar-saldos").classList.add("oculto");
+    cont.innerHTML = balances.length ? `<p class="vacio">Elige un balance de la lista para verlo.</p>` : "";
+    return;
+  }
+  $("buscar-saldos").classList.remove("oculto");
+  if (!vista.hojas.length) { cont.innerHTML = `<p class="vacio">Abriendo…</p>`; return; }
+  vista.hoja = Math.min(vista.hoja, vista.hojas.length - 1);
+  $("saldos-hojas").innerHTML = vista.hojas.map((h, i) =>
+    `<button class="btn chip${i === vista.hoja ? " activa" : ""}" data-hoja="${i}">${esc(h.nombre.toUpperCase())}</button>`).join("");
+  const h = vista.hojas[vista.hoja];
+  const q = norm($("buscar-saldos").value.trim());
+  const hoy = new Date().toISOString().slice(0, 10);
+  let total = 0, entradas = 0, salidas = 0;
+  const cuerpo = h.cats.map((c) => {
+    const items = c.items.filter((it) => !q || norm(`${it.desc} ${it.carac} ${it.um} ${it.docE} ${it.docS}`).includes(q));
+    if (!items.length) return "";
+    total += items.length;
+    entradas += items.reduce((s, it) => s + (it.cantE || 0), 0);
+    salidas += items.reduce((s, it) => s + (it.cantS || 0), 0);
+    return `<tr class="cat"><td colspan="11">${esc(c.nombre)} <small>${items.length}</small></td></tr>` + items.map((it) => {
+      const vencido = it.venc.iso && it.venc.iso < hoy;
+      return `<tr>
+        <td class="num n">${esc(it.n)}</td>
+        <td class="nombre">${resaltar(it.desc, $("buscar-saldos").value)}</td>
+        <td>${esc(it.carac)}</td>
+        <td>${esc(it.um)}</td>
+        <td class="${vencido ? "vencido" : ""}">${esc(it.venc.texto)}${vencido ? "<small>vencido</small>" : ""}</td>
+        <td class="num">${celNum(it.ant)}</td>
+        <td class="doc">${esc(it.docE)}</td>
+        <td class="num ing">${celNum(it.cantE)}</td>
+        <td class="doc">${esc(it.docS)}</td>
+        <td class="num des">${celNum(it.cantS)}</td>
+        <td class="num stock${it.saldo === 0 ? " bajo" : ""}">${celNum(it.saldo)}</td>
+      </tr>`;
+    }).join("");
+  }).join("");
+  cont.innerHTML = `
+    <p class="nota">📄 ${esc(h.titulo || vista.nombre)}</p>
+    ${h.aviso ? `<p class="nota aviso-saldos">⚠️ ${esc(h.aviso)}</p>` : ""}
+    <div class="totales"><div><small>Artículos</small><b>${total}</b></div>
+      <div class="ing"><small>Entradas</small><b>${entradas}</b></div>
+      <div class="des"><small>Salidas</small><b>${salidas}</b></div></div>
+    ${cuerpo ? `<div class="tabla-wrap"><table class="tabla saldos">
+      <thead>
+        <tr><th rowspan="2">N°</th><th rowspan="2">Descripción artículo</th><th rowspan="2">Características</th><th rowspan="2">U/M</th>
+          <th rowspan="2">Fec/Ven</th><th class="num">Saldo ant.</th><th colspan="2" class="centro">Entrada</th><th colspan="2" class="centro">Salida</th><th rowspan="2" class="num">Saldo</th></tr>
+        <tr><th class="num">Cant</th><th>Doc N°</th><th class="num">Cant</th><th>Doc N°</th><th class="num">Cant</th></tr>
+      </thead>
+      <tbody>${cuerpo}</tbody>
+    </table></div>` : `<p class="vacio">Sin resultados</p>`}`;
+}
+
+$("btn-agregar-balance").addEventListener("click", () => $("input-saldos").click());
+$("input-saldos").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (f) subirBalance(f);
+});
+$("saldos-lista").addEventListener("click", (e) => {
+  const abrir = e.target.closest("[data-abrir]");
+  const ver = e.target.closest("[data-ver]");
+  const desc = e.target.closest("[data-descargar]");
+  const elim = e.target.closest("[data-eliminar]");
+  if (abrir) return abrirBalance(abrir.dataset.abrir);
+  if (ver) return verBalanceExcel(ver.dataset.ver);
+  if (desc) return descargarBalance(desc.dataset.descargar);
+  if (elim) return eliminarBalance(elim.dataset.eliminar);
+});
+$("saldos-hojas").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-hoja]");
+  if (!b) return;
+  vista.hoja = +b.dataset.hoja;
+  pintarSaldos();
+});
+$("buscar-saldos").addEventListener("input", pintarSaldos);
+
+// =====================================================================
 //  Navegación y sesión
 // =====================================================================
 const PINTAR = {
@@ -1726,6 +1993,7 @@ const PINTAR = {
   control: () => pintarTablaMeds("control"),
   movimientos: pintarMovimientos,
   usuarios: pintarUsuarios,
+  saldos: pintarSaldos,
 };
 
 function irA(sec) {
@@ -1864,6 +2132,11 @@ onAuthStateChanged(auth, async (user) => {
       cargado.movs = true;
       revisarAvisos();
       if (estado.seccion === "movimientos") pintarMovimientos();
+    }),
+    onSnapshot(collection(db, "saldos"), (s) => {
+      balances = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.subido?.seconds || 0) - (a.subido?.seconds || 0));
+      if (vista.id && !balances.find((b) => b.id === vista.id)) { vista.id = null; vista.hojas = []; }
+      if (estado.seccion === "saldos") pintarSaldos();
     }),
     onSnapshot(ref, (s) => {
       if (s.exists() && !s.data().activo) return signOut(auth);

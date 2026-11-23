@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f3d2b">
   <title>Farmacia de la Aviación del Ejército · BS N° 800</title>
   <link rel="manifest" href="manifest.json">
@@ -94,6 +94,7 @@
         <button data-sec="despacho" class="activa"><span class="ico">💊</span><span>Despacho</span></button>
         <button data-sec="ingreso" class="solo-admin"><span class="ico">📦</span><span>Ingreso</span></button>
         <button data-sec="control"><span class="ico">📊</span><span>Control visible</span></button>
+        <button data-sec="saldos"><span class="ico">📑</span><span>Saldos</span></button>
         <button data-sec="movimientos"><span class="ico">📋</span><span>Movimientos</span></button>
         <button data-sec="usuarios"><span class="ico">👤</span><span>Usuarios</span><i id="badge-pendientes" class="badge oculto"></i></button>
       </nav>
@@ -143,6 +144,21 @@
         <p id="mov-rango" class="nota"></p>
         <div id="mov-totales" class="totales"></div>
         <div id="lista-movimientos"></div>
+      </div>
+
+      <!-- SALDOS / BALANCES: Excel guardado en el sistema (ver y descargar) -->
+      <div id="sec-saldos" class="seccion oculto">
+        <h2 class="titulo-sec">Saldos</h2>
+        <div class="acciones">
+          <button id="btn-agregar-balance" class="btn primario solo-admin">⬆ Agregar nuevo balance</button>
+          <input id="input-saldos" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+        </div>
+        <div id="saldos-lista" class="balances"></div>
+        <div id="saldos-hojas" class="chips"></div>
+        <div class="barra-busqueda">
+          <input id="buscar-saldos" class="buscar oculto" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar artículo, U/M o documento…">
+        </div>
+        <div id="lista-saldos"></div>
       </div>
 
       <!-- USUARIOS -->

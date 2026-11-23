@@ -354,6 +354,14 @@ body:not(.es-admin) .solo-admin { display: none; }
 .eliminar-med a { color: var(--rojo); font-weight: 600; }
 .n-mov { color: var(--suave); }
 
+/* ✕ para cerrar avisos ("¿Quisiste decir…?") */
+.existentes, .aviso-cerrable { position: relative; }
+.existentes > p { padding-right: 34px; }
+.aviso-cerrable { padding-right: 40px; background: var(--ambar-fondo); border: 1px solid var(--ambar-borde); border-radius: 10px; padding: 8px 40px 8px 12px; }
+.cerrar-aviso {
+  position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,.08); color: var(--texto); font-size: 15px; font-weight: 800; cursor: pointer;
+}
 /* Nuevo medicamento: los que ya existen con ese nombre */
 .existentes { background: var(--ambar-fondo); border: 1px solid var(--ambar-borde); border-radius: 10px; padding: 10px 12px; margin: -4px 0 12px; }
 .existentes > p { margin: 0 0 6px; font-weight: 700; color: var(--ambar-texto); font-size: 14px; }
@@ -411,6 +419,37 @@ body:not(.es-admin) .solo-admin { display: none; }
 .resumen li small { display: block; color: var(--suave); }
 .resumen .cant { font-weight: 800; font-size: 18px; color: var(--rojo); white-space: nowrap; }
 
+/* ---------- Saldos (Excel subido) ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
+.btn.chip { padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
+.btn.chip.activa { background: var(--verde); border-color: var(--verde); color: #fff; }
+.excel-grid { overflow: auto; max-height: 70vh; border: 1px solid var(--borde); border-radius: 8px; }
+.excel-grid table { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.excel-grid td { border: 1px solid #c9cfc6; padding: 3px 6px; min-width: 40px; }
+.excel-grid tr:first-child td { position: sticky; top: 0; }
+.balances { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.balance-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); padding: 10px 12px; }
+.balance-item.abierto { border-color: var(--verde); box-shadow: 0 0 0 1px var(--verde) inset; }
+.balance-abrir { flex: 1; min-width: 180px; text-align: left; background: none; border: none; cursor: pointer; padding: 0; color: var(--texto); }
+.bal-nombre { display: block; font-weight: 700; font-size: 16px; color: var(--verde); }
+.balance-abrir small { display: block; color: var(--suave); font-size: 12px; margin-top: 2px; }
+.balance-acc { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.mini { padding: 7px 12px; font-size: 13px; margin: 0; }
+.btn.mini.peligro { background: #fff; color: var(--rojo); border: 1px solid var(--rojo); }
+.aviso-saldos { background: var(--ambar-fondo); border: 1px solid var(--ambar-borde); color: var(--ambar-texto); border-radius: 10px; padding: 8px 12px; }
+.tabla.saldos { font-size: 14px; }
+.tabla.saldos th { font-size: 12px; }
+.tabla.saldos th.centro { text-align: center; }
+.tabla.saldos thead tr:first-child th { border-bottom: 1px solid rgba(255,255,255,.25); }
+.tabla.saldos td { padding: 7px 8px; }
+.tabla.saldos .nombre { min-width: 180px; }
+.tabla.saldos .doc { white-space: nowrap; color: var(--suave); }
+.tabla.saldos .stock { font-size: 16px; }
+.tabla.saldos tr.cat td { background: var(--verde-claro); color: var(--verde); font-weight: 800; position: sticky; left: 0; }
+.tabla.saldos tr.cat small { display: inline; margin-left: 6px; font-weight: 600; }
+.tabla.saldos td.vencido { color: var(--rojo); font-weight: 700; }
+
 /* ---------- Mensajes ---------- */
 .exito { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.25); padding: 16px; }
 .exito > div { background: #fff; border-radius: 18px; padding: 28px 32px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.25); max-width: 420px; animation: aparecer .2s ease-out; }
@@ -444,6 +483,8 @@ body:not(.es-admin) .solo-admin { display: none; }
   .contenido { padding-top: calc(var(--alto-barra) + var(--alto-menu) + env(safe-area-inset-top)); }
   /* La pestaña activa ya dice la sección: sin título, el buscador queda más cerca */
   .titulo-sec { display: none; }
+  /* Separación entre el menú y el botón "+ Nuevo medicamento" */
+  #sec-ingreso .acciones, #sec-saldos .acciones { margin-top: 14px; }
   .alertas { margin: 8px 0 0; }
   .barra-busqueda { padding: 6px 0 8px; }
   #despacho-curso:not(:empty) { margin-top: 8px; }
