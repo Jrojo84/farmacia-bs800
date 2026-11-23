@@ -14,7 +14,7 @@ const fb = DEMO ? await import("./demo.js") : await cargarFirebase();
 export const {
   initializeApp, getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword,
   getFunctions, httpsCallable,
-  initializeFirestore, getFirestore, persistentLocalCache, collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
+  initializeFirestore, getFirestore, persistentLocalCache, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, query, where, runTransaction, writeBatch, serverTimestamp, Timestamp,
 } = fb;
 

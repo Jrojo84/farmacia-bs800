@@ -1,7 +1,7 @@
 import {
   activarAppCheck,
   initializeApp, getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword,
-  getFunctions, httpsCallable, initializeFirestore, getFirestore, persistentLocalCache, collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
+  getFunctions, httpsCallable, initializeFirestore, getFirestore, persistentLocalCache, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, query, where, runTransaction, writeBatch, serverTimestamp, Timestamp,
 } from "./firebase.js";
 import {
@@ -1977,13 +1977,17 @@ async function cargarTodoAlSistema() {
     const u = estado.usuario;
     let batch = writeBatch(db), ops = 0;
     const paso = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
-    for (const m of estado.meds) { batch.delete(doc(db, "medicamentos", m.id)); ops++; await paso(); }
-    for (const mv of estado.movs) { batch.delete(doc(db, "movimientos", mv.id)); ops++; await paso(); }
+    // Identificador FIJO por nombre: recargar sobrescribe el mismo medicamento (nunca duplica).
+    const idMed = (key) => "med_" + (Array.from(key).reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261)).toString(36) + "_" + key.length.toString(36);
+    // Borrar TODO lo que haya en la base (no solo lo que está en pantalla), para que no queden copias viejas.
+    const [snapMeds, snapMovs] = await Promise.all([getDocs(collection(db, "medicamentos")), getDocs(collection(db, "movimientos"))]);
+    for (const d of snapMeds.docs) { batch.delete(d.ref); ops++; await paso(); }
+    for (const d of snapMovs.docs) { batch.delete(d.ref); ops++; await paso(); }
     const idPorKey = new Map();
     for (const [key, d] of cat) {
-      const ref = doc(collection(db, "medicamentos"));
-      idPorKey.set(key, ref.id);
-      batch.set(ref, { nombre: d.nombre, unidad: d.unidad, presentacion: "", via: "", categoria: d.categoria,
+      const id = idMed(key);
+      idPorKey.set(key, id);
+      batch.set(doc(db, "medicamentos", id), { nombre: d.nombre, unidad: d.unidad, presentacion: "", via: "", categoria: d.categoria,
         lotes: d.stock > 0 ? [{ venc: d.venc, cant: d.stock }] : [], stock: d.stock,
         creado: serverTimestamp(), actualizado: serverTimestamp() });
       ops++; await paso();
