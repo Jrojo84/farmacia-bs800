@@ -1960,7 +1960,7 @@ function pintarSaldos() {
     </table></div>` : `<p class="vacio">Sin resultados</p>`}`;
 }
 
-$("btn-agregar-balance").addEventListener("click", () => $("input-saldos").click());
+// El botón "Agregar nuevo balance" es una <label for="input-saldos">: abre el selector de archivo de forma nativa (funciona también en iPhone).
 $("input-saldos").addEventListener("change", (e) => {
   const f = e.target.files[0];
   e.target.value = "";
