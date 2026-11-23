@@ -2014,6 +2014,31 @@ async function cargarTodoAlSistema() {
   }
 }
 
+/** Borra TODO del sistema (balances, medicamentos y movimientos) para
+ *  empezar de cero. Solo administrador. */
+async function reestablecerTodo() {
+  if (!estado.usuario?.admin) return;
+  if (!confirm("¿BORRAR TODO del sistema?\n\nSe eliminarán:\n• Todos los balances (meses) subidos\n• Todos los medicamentos\n• Todos los movimientos\n\nNo se puede deshacer. Después podrás subir el archivo de nuevo.\n\n¿Continuar?")) return;
+  if (!confirm("Confirma una vez más: el sistema quedará VACÍO. ¿Seguro?")) return;
+  try {
+    toast("Borrando todo… espera un momento.");
+    let batch = writeBatch(db), ops = 0;
+    const paso = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+    let borrados = 0;
+    for (const col of ["saldos", "medicamentos", "movimientos"]) {
+      const snap = await getDocs(collection(db, col));
+      for (const d of snap.docs) { batch.delete(d.ref); ops++; borrados++; await paso(); }
+    }
+    if (ops) await batch.commit();
+    vista.id = null; vista.hojas = []; vista.hoja = 0;
+    exito(`Sistema reestablecido \u2714\nYa puedes subir el archivo de nuevo.`);
+  } catch (er) {
+    toast(er.code === "permission-denied"
+      ? "Permiso denegado. Revisa que publicaste las reglas de Firestore (deben permitir al admin borrar)."
+      : ("No se pudo borrar. " + (er.message || "")), true);
+  }
+}
+
 function pintarSaldos() {
   const abierto = vista.id && balances.find((b) => b.id === vista.id);
   $("btn-cargar-todo").classList.toggle("oculto", !(estado.usuario?.admin && balances.length));
@@ -2094,6 +2119,7 @@ $("input-saldos").addEventListener("change", (e) => {
   if (f) subirBalance(f);
 });
 $("btn-cargar-todo").addEventListener("click", cargarTodoAlSistema);
+$("btn-reset-todo").addEventListener("click", reestablecerTodo);
 $("saldos-lista").addEventListener("click", (e) => {
   const abrir = e.target.closest("[data-abrir]");
   const ver = e.target.closest("[data-ver]");

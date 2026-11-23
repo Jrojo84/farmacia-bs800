@@ -438,6 +438,7 @@ label#btn-agregar-balance { display: inline-flex; align-items: center; justify-c
 .balance-acc { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn.mini { padding: 7px 12px; font-size: 13px; margin: 0; }
 .btn.mini.peligro { background: #fff; color: var(--rojo); border: 1px solid var(--rojo); }
+.btn.peligro { background: #fff; color: var(--rojo); border: 1px solid var(--rojo); }
 .aviso-saldos { background: var(--ambar-fondo); border: 1px solid var(--ambar-borde); color: var(--ambar-texto); border-radius: 10px; padding: 8px 12px; }
 .tabla.saldos { font-size: 14px; }
 .tabla.saldos th { font-size: 12px; }
