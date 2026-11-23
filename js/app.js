@@ -1887,6 +1887,50 @@ async function verBalanceExcel(id) {
   }
 }
 
+/** Carga los medicamentos del ÚLTIMO mes del balance como inventario real.
+ *  Reemplaza (borra y vuelve a crear) todos los medicamentos. El stock de
+ *  cada uno es el SALDO del último mes. No crea movimientos (el detalle por
+ *  mes queda en el balance), así se puede recargar sin acumular historial. */
+async function cargarBalanceAlSistema(id) {
+  if (!estado.usuario?.admin) return;
+  const b = balances.find((x) => x.id === id);
+  if (!b) return;
+  let hojas = (vista.id === id && vista.hojas.length) ? vista.hojas : null;
+  try {
+    if (!hojas) {
+      if (!window.XLSX) await cargarScript(LIB_XLSX);
+      const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
+      hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+    }
+  } catch { return toast("No se pudo leer el balance.", true); }
+  if (!hojas.length) return toast("El balance no tiene meses legibles.", true);
+
+  const mes = hojas.at(-1);                        // el último mes del archivo
+  const lista = mes.cats.flatMap((c) => c.items.map((it) => {
+    const nombre = [it.desc, it.carac].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const cant = Math.max(0, Number(it.saldo) || 0);
+    return { nombre, unidad: it.um || "", presentacion: "", via: "", categoria: c.nombre || "",
+      lotes: cant > 0 ? [{ venc: it.venc.iso || "", cant }] : [], stock: cant };
+  })).filter((d) => d.nombre);
+  if (!lista.length) return toast("No se encontraron medicamentos en el último mes.", true);
+
+  const actuales = estado.meds.length;
+  if (!confirm(`Vas a CARGAR ${lista.length} medicamentos con el stock de ${mes.nombre.toUpperCase()}.\n\n` +
+    `Esto BORRA los ${actuales} medicamento(s) que hay ahora y los reemplaza. El historial de movimientos no se toca.\n\n¿Continuar?`)) return;
+
+  try {
+    toast("Cargando medicamentos al sistema… espera unos segundos.");
+    let batch = writeBatch(db), ops = 0;
+    const paso = async () => { if (ops >= 450) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+    for (const m of estado.meds) { batch.delete(doc(db, "medicamentos", m.id)); ops++; await paso(); }
+    for (const d of lista) { batch.set(doc(collection(db, "medicamentos")), { ...d, creado: serverTimestamp(), actualizado: serverTimestamp() }); ops++; await paso(); }
+    if (ops) await batch.commit();
+    exito(`Se cargaron ${lista.length} medicamentos (stock de ${mes.nombre.toUpperCase()}) \u2714`);
+  } catch (er) {
+    toast(er.code === "permission-denied" ? "Solo el administrador puede cargar medicamentos (¿publicaste las reglas?)." : ("No se pudo cargar. " + (er.message || "")), true);
+  }
+}
+
 function pintarSaldos() {
   // La lista de balances guardados en el sistema
   const abierto = vista.id && balances.find((b) => b.id === vista.id);
@@ -1900,6 +1944,7 @@ function pintarSaldos() {
           <span class="balance-acc">
             <button class="btn mini" data-ver="${b.id}">👁 Ver en Excel</button>
             <button class="btn mini" data-descargar="${b.id}">⬇ Descargar</button>
+            <button class="btn mini primario solo-admin" data-cargar="${b.id}">⬆ Cargar al sistema</button>
             <button class="btn mini peligro solo-admin" data-eliminar="${b.id}">Eliminar</button>
           </span>
         </div>`).join("")
@@ -1970,10 +2015,12 @@ $("saldos-lista").addEventListener("click", (e) => {
   const abrir = e.target.closest("[data-abrir]");
   const ver = e.target.closest("[data-ver]");
   const desc = e.target.closest("[data-descargar]");
+  const carga = e.target.closest("[data-cargar]");
   const elim = e.target.closest("[data-eliminar]");
   if (abrir) return abrirBalance(abrir.dataset.abrir);
   if (ver) return verBalanceExcel(ver.dataset.ver);
   if (desc) return descargarBalance(desc.dataset.descargar);
+  if (carga) return cargarBalanceAlSistema(carga.dataset.cargar);
   if (elim) return eliminarBalance(elim.dataset.eliminar);
 });
 $("saldos-hojas").addEventListener("click", (e) => {
