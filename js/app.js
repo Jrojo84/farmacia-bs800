@@ -1882,29 +1882,33 @@ async function eliminarBalance(id) {
   }
 }
 
-/** Muestra el archivo del mes tal cual se ve en Excel. */
-async function verBalanceExcel(id) {
+/** Descarga el mes como PDF con el formato de la farmacia. */
+async function descargarBalancePDF(id) {
   const b = balances.find((x) => x.id === id);
   if (!b) return;
   try {
     if (!window.XLSX) await cargarScript(LIB_XLSX);
     const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
-    const hojas = wb.SheetNames;
-    const chips = hojas.map((n, i) => `<button class="btn chip" data-vex="${i}">${esc(n.toUpperCase())}</button>`).join("");
-    const c = abrirModal(b.archivo || b.mes, `<p class="nota">Así se ve en Excel. Para editarlo, descarga el archivo.</p>
-      <div id="vex-chips" class="chips">${chips}</div>
-      <div id="vex-grid" class="excel-grid"></div>`, true);
-    const pintar = (i) => {
-      c.querySelector("#vex-grid").innerHTML = XLSX.utils.sheet_to_html(wb.Sheets[hojas[i]]);
-      c.querySelectorAll("#vex-chips .chip").forEach((x, k) => x.classList.toggle("activa", k === i));
-    };
-    c.querySelector("#vex-chips").addEventListener("click", (e) => {
-      const x = e.target.closest("[data-vex]");
-      if (x) pintar(+x.dataset.vex);
+    const hs = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+    const h = hs.find((x) => x.periodo === b.periodo) || hs[0];
+    if (!h) return toast("No se pudo leer el mes.", true);
+    toast("Generando PDF…");
+    const { pdf, tabla } = await nuevoPdf(`SALDO · ${(b.mes || periodoNombre(b.periodo)).toUpperCase()}`, h.titulo || "");
+    const body = [];
+    for (const c of h.cats) {
+      if (!c.items.length) continue;
+      body.push([{ content: c.nombre, colSpan: 11, styles: { fontStyle: "bold", fillColor: [231, 239, 228], textColor: VERDE } }]);
+      for (const it of c.items) body.push([it.n, it.desc, it.carac, it.um, it.venc.texto, celNum(it.ant), it.docE, celNum(it.cantE), it.docS, celNum(it.cantS), celNum(it.saldo)]);
+    }
+    tabla({
+      head: [["N°", "Descripción artículo", "Características", "U/M", "Fec/Ven", "Saldo ant.", "Doc entrada", "Cant", "Doc salida", "Cant", "Saldo"]],
+      body,
+      styles: { fontSize: 7.5, cellPadding: 1.2, lineColor: [217, 222, 216], lineWidth: 0.1 },
+      columnStyles: { 0: { halign: "right", cellWidth: 8 }, 5: { halign: "right" }, 7: { halign: "right" }, 9: { halign: "right" }, 10: { halign: "right" } },
     });
-    pintar(0);
+    pdf.save(`saldo-${b.periodo}.pdf`);
   } catch {
-    toast("No se pudo abrir el visor de Excel.", true);
+    toast("No se pudo generar el PDF.", true);
   }
 }
 
@@ -2041,7 +2045,6 @@ async function reestablecerTodo() {
 
 function pintarSaldos() {
   const abierto = vista.id && balances.find((b) => b.id === vista.id);
-  $("btn-cargar-todo").classList.toggle("oculto", !(estado.usuario?.admin && balances.length));
   $("saldos-lista").innerHTML = balances.length
     ? balances.map((b) => `
         <div class="balance-item${b.id === vista.id ? " abierto" : ""}">
@@ -2050,8 +2053,9 @@ function pintarSaldos() {
             <small>${esc(b.archivo || "")}${b.por ? ` · subió ${esc(b.por)}` : ""}${fmtFecha(b.subido) ? ` · ${fmtFecha(b.subido)}` : ""}</small>
           </button>
           <span class="balance-acc">
-            <button class="btn mini" data-ver="${b.id}">👁 Ver en Excel</button>
-            <button class="btn mini" data-descargar="${b.id}">⬇ Descargar</button>
+            <button class="btn mini" data-excel="${b.id}">⬇ Excel</button>
+            <button class="btn mini" data-pdf="${b.id}">⬇ PDF</button>
+            <button class="btn mini primario solo-admin" data-cargar="${b.id}">⬆ Cargar al sistema</button>
             <button class="btn mini peligro solo-admin" data-eliminar="${b.id}">Eliminar</button>
           </span>
         </div>`).join("")
@@ -2072,13 +2076,9 @@ function pintarSaldos() {
   const h = vista.hojas[vista.hoja];
   const q = norm($("buscar-saldos").value.trim());
   const hoy = new Date().toISOString().slice(0, 10);
-  let total = 0, entradas = 0, salidas = 0;
   const cuerpo = h.cats.map((c) => {
     const items = c.items.filter((it) => !q || norm(`${it.desc} ${it.carac} ${it.um} ${it.docE} ${it.docS}`).includes(q));
     if (!items.length) return "";
-    total += items.length;
-    entradas += items.reduce((s, it) => s + (it.cantE || 0), 0);
-    salidas += items.reduce((s, it) => s + (it.cantS || 0), 0);
     return `<tr class="cat"><td colspan="11">${esc(c.nombre)} <small>${items.length}</small></td></tr>` + items.map((it) => {
       const vencido = it.venc.iso && it.venc.iso < hoy;
       return `<tr>
@@ -2099,9 +2099,6 @@ function pintarSaldos() {
   cont.innerHTML = `
     <p class="nota">📄 ${esc(h.titulo || vista.mes)}</p>
     ${h.aviso ? `<p class="nota aviso-saldos">⚠️ ${esc(h.aviso)}</p>` : ""}
-    <div class="totales"><div><small>Artículos</small><b>${total}</b></div>
-      <div class="ing"><small>Entradas</small><b>${entradas}</b></div>
-      <div class="des"><small>Salidas</small><b>${salidas}</b></div></div>
     ${cuerpo ? `<div class="tabla-wrap"><table class="tabla saldos">
       <thead>
         <tr><th rowspan="2">N°</th><th rowspan="2">Descripción artículo</th><th rowspan="2">Características</th><th rowspan="2">U/M</th>
@@ -2118,17 +2115,18 @@ $("input-saldos").addEventListener("change", (e) => {
   e.target.value = "";
   if (f) subirBalance(f);
 });
-$("btn-cargar-todo").addEventListener("click", cargarTodoAlSistema);
 $("btn-reset-todo").addEventListener("click", reestablecerTodo);
 $("saldos-lista").addEventListener("click", (e) => {
   const abrir = e.target.closest("[data-abrir]");
-  const ver = e.target.closest("[data-ver]");
-  const desc = e.target.closest("[data-descargar]");
+  const excel = e.target.closest("[data-excel]");
+  const pdf = e.target.closest("[data-pdf]");
+  const carga = e.target.closest("[data-cargar]");
   const elim = e.target.closest("[data-eliminar]");
-  if (abrir) return abrirBalance(abrir.dataset.abrir);
-  if (ver) return verBalanceExcel(ver.dataset.ver);
-  if (desc) return descargarBalance(desc.dataset.descargar);
+  if (excel) return descargarBalance(excel.dataset.excel);
+  if (pdf) return descargarBalancePDF(pdf.dataset.pdf);
+  if (carga) return cargarTodoAlSistema();
   if (elim) return eliminarBalance(elim.dataset.eliminar);
+  if (abrir) return abrirBalance(abrir.dataset.abrir);
 });
 $("saldos-hojas").addEventListener("click", (e) => {
   const b = e.target.closest("[data-hoja]");
