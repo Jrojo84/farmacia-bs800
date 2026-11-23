@@ -1934,18 +1934,29 @@ async function cargarTodoAlSistema() {
     }
   }
 
-  // Plan de movimientos de cada mes
+  // Plan de movimientos: de TODOS los medicamentos y de todos los meses
+  // (así los que ya no figuran también tienen su historial).
+  const fechaDe = (pp) => { const [y, mm] = pp.split("-").map(Number); return Timestamp.fromDate(new Date(y, mm - 1, 15, 12)); };
   const movsPlan = [];
+  const ultApar = new Map(); // último mes en que aparece cada artículo y su saldo
   for (const p of periodos) {
-    const [y, mm] = p.split("-").map(Number);
-    const fecha = Timestamp.fromDate(new Date(y, mm - 1, 15, 12));
+    const fecha = fechaDe(p);
     for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
       const nombre = nomArt(it); if (!nombre) continue;
-      const key = norm(nombre); if (!saldoUlt.has(key)) continue; // movimientos solo de los que siguen en el último mes
+      const key = norm(nombre);
+      ultApar.set(key, { periodo: p, saldo: Math.max(0, Number(it.saldo) || 0) }); // orden ascendente → queda el último
       const base = { key, nombre, unidad: it.um || "", periodo: p, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
       if ((it.cantE || 0) > 0) movsPlan.push({ ...base, tipo: "ingreso", cant: it.cantE, doc: it.docE });
       if ((it.cantS || 0) > 0) movsPlan.push({ ...base, tipo: "despacho", cant: it.cantS, doc: it.docS });
     }
+  }
+  // Descontinuados (ya no están en el último mes): baja automática a 0 el mes
+  // siguiente a su última aparición, para que el historial cierre en 0.
+  for (const [key, ult] of ultApar) {
+    if (saldoUlt.has(key) || ult.saldo <= 0) continue;
+    const sigP = periodos[periodos.indexOf(ult.periodo) + 1]; if (!sigP) continue;
+    const d = cat.get(key);
+    movsPlan.push({ key, nombre: d.nombre, unidad: d.unidad, periodo: sigP, fecha: fechaDe(sigP), venc: d.venc, ant: ult.saldo, saldo: 0, tipo: "despacho", cant: ult.saldo, doc: "", baja: true });
   }
 
   const ultimo = periodoNombre(periodos.at(-1)).toUpperCase();
@@ -1985,7 +1996,7 @@ async function cargarTodoAlSistema() {
         stockAnterior: mv.ant, stockNuevo: mv.saldo,
         uid: u.uid, usuarioNombre: u.nombre, usuarioDni: u.dni || "",
         acta: mv.tipo === "ingreso" ? (mv.doc || "") : "", pacienteDni: "", pacienteNombre: "",
-        observacion: `Carga inicial${mv.doc && mv.tipo !== "ingreso" ? ` · ${mv.doc}` : ""}`,
+        observacion: mv.baja ? "Fuera de inventario (sin stock)" : `Carga inicial${mv.doc && mv.tipo !== "ingreso" ? ` · ${mv.doc}` : ""}`,
       });
       ops++; await paso();
     }
