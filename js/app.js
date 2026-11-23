@@ -1803,12 +1803,14 @@ function base64ABytes(b64) {
   return bytes;
 }
 
-let balances = [];                                   // [{ id, nombre, meses, tamano, por, subido, b64 }]
-const vista = { id: null, nombre: "", hojas: [], hoja: 0 }; // balance abierto en pantalla
+let balances = [];                 // un balance por MES: { id=periodo, periodo, mes, titulo, archivo, por, subido, b64 }
+const vista = { id: null, mes: "", hojas: [], hoja: 0 };  // mes abierto en pantalla
 
 const fmtFecha = (ts) => { try { return ts?.toDate?.().toLocaleDateString("es-PE") || ""; } catch { return ""; } };
+const nomArt = (it) => [it.desc, it.carac].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 
-/** Sube un Excel como nuevo balance al sistema (solo administrador). */
+/** Sube un Excel. Cada hoja-mes se guarda bajo su período (AAAA-MM); si ese
+ *  mes ya existe, lo REEMPLAZA. Meses distintos se agregan aparte. */
 async function subirBalance(file) {
   try {
     if (file.size > MAX_BALANCE) return toast(`El archivo pesa ${Math.round(file.size / 1024)} KB; el máximo es ${Math.round(MAX_BALANCE / 1024)} KB.`, true);
@@ -1816,19 +1818,22 @@ async function subirBalance(file) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
     const hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
-    if (!hojas.length) return toast("El archivo no tiene el formato de saldos (falta la columna DESCRIPCIÓN ARTÍCULO)", true);
-    toast("Guardando balance en el sistema…");
-    const ref = doc(collection(db, "saldos"));
-    await setDoc(ref, {
-      nombre: file.name,
-      meses: hojas.map((h) => h.nombre),
-      tamano: file.size,
-      por: estado.usuario?.nombre || "",
-      b64: bytesABase64(buf),
-      subido: serverTimestamp(),
-    });
-    vista.id = ref.id; vista.hoja = 0; vista.hojas = []; vista.nombre = file.name;
-    toast(`Balance guardado: ${file.name}`);
+    if (!hojas.length) return toast("El archivo no tiene el formato de saldos (falta la columna DESCRIPCIÓN ARTÍCULO).", true);
+    const conMes = hojas.filter((h) => h.periodo);
+    const sinMes = hojas.filter((h) => !h.periodo);
+    if (!conMes.length) return toast("No pude reconocer el mes. El título debe decir, por ejemplo, ENERO 2026.", true);
+    toast("Guardando en el sistema…");
+    const b64 = bytesABase64(buf);
+    for (const h of conMes) {
+      await setDoc(doc(db, "saldos", h.periodo), {
+        periodo: h.periodo, mes: periodoNombre(h.periodo), titulo: h.titulo || "",
+        archivo: file.name, tamano: file.size, por: estado.usuario?.nombre || "",
+        b64, subido: serverTimestamp(),
+      });
+    }
+    vista.id = conMes.at(-1).periodo; vista.hoja = 0; vista.hojas = [];
+    const nombres = conMes.map((h) => periodoNombre(h.periodo)).join(", ");
+    toast(`Guardado: ${nombres}` + (sinMes.length ? ` (se omitieron ${sinMes.length} hoja(s) sin mes reconocido)` : ""));
   } catch (er) {
     toast(er.code === "permission-denied"
       ? "Solo el administrador puede agregar balances (o faltan los permisos en Firebase)."
@@ -1836,45 +1841,47 @@ async function subirBalance(file) {
   }
 }
 
-/** Abre un balance: lee su Excel guardado y lo muestra en la tabla. */
+/** Abre un mes: muestra su hoja en la tabla. */
 async function abrirBalance(id) {
   const b = balances.find((x) => x.id === id);
   if (!b) return;
-  vista.id = id; vista.nombre = b.nombre; vista.hoja = 0; vista.hojas = [];
-  $("lista-saldos").innerHTML = `<p class="vacio">Abriendo ${esc(b.nombre)}…</p>`;
+  vista.id = id; vista.mes = b.mes || periodoNombre(b.periodo); vista.hoja = 0; vista.hojas = [];
+  $("lista-saldos").innerHTML = `<p class="vacio">Abriendo ${esc(vista.mes)}…</p>`;
   try {
     if (!window.XLSX) await cargarScript(LIB_XLSX);
     const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
-    vista.hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+    const hs = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+    const h = hs.find((x) => x.periodo === b.periodo) || hs[0];
+    vista.hojas = h ? [h] : [];
   } catch {
-    toast("No se pudo abrir el balance.", true);
+    toast("No se pudo abrir el mes.", true);
   }
   if (estado.seccion === "saldos") pintarSaldos();
 }
 
-/** Descarga el balance tal cual se subió (mismo archivo, mismo formato). */
+/** Descarga el archivo tal cual se subió (mismo formato). */
 function descargarBalance(id) {
   const b = balances.find((x) => x.id === id);
   if (!b) return;
   const blob = new Blob([base64ABytes(b.b64)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: b.nombre });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: b.archivo || `${b.mes}.xlsx` });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
 async function eliminarBalance(id) {
   const b = balances.find((x) => x.id === id);
-  if (!b || !confirm(`¿Eliminar el balance "${b.nombre}" del sistema? Esto lo quita para todos.`)) return;
+  if (!b || !confirm(`¿Eliminar el balance de ${b.mes || periodoNombre(b.periodo)} del sistema? Esto lo quita para todos.`)) return;
   try {
     await deleteDoc(doc(db, "saldos", id));
     if (vista.id === id) { vista.id = null; vista.hojas = []; }
-    toast("Balance eliminado");
+    toast("Mes eliminado");
   } catch (er) {
-    toast(er.code === "permission-denied" ? "Solo el administrador puede eliminar balances." : "No se pudo eliminar.", true);
+    toast(er.code === "permission-denied" ? "Solo el administrador puede eliminar." : "No se pudo eliminar.", true);
   }
 }
 
-/** Muestra el balance tal cual se ve en Excel (grilla con sus columnas). */
+/** Muestra el archivo del mes tal cual se ve en Excel. */
 async function verBalanceExcel(id) {
   const b = balances.find((x) => x.id === id);
   if (!b) return;
@@ -1883,7 +1890,7 @@ async function verBalanceExcel(id) {
     const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
     const hojas = wb.SheetNames;
     const chips = hojas.map((n, i) => `<button class="btn chip" data-vex="${i}">${esc(n.toUpperCase())}</button>`).join("");
-    const c = abrirModal(b.nombre, `<p class="nota">Así se ve en Excel. Para editarlo, descarga el archivo.</p>
+    const c = abrirModal(b.archivo || b.mes, `<p class="nota">Así se ve en Excel. Para editarlo, descarga el archivo.</p>
       <div id="vex-chips" class="chips">${chips}</div>
       <div id="vex-grid" class="excel-grid"></div>`, true);
     const pintar = (i) => {
@@ -1900,82 +1907,89 @@ async function verBalanceExcel(id) {
   }
 }
 
-/** Carga los medicamentos del ÚLTIMO mes del balance como inventario real.
- *  Reemplaza (borra y vuelve a crear) todos los medicamentos. El stock de
- *  cada uno es el SALDO del último mes. No crea movimientos (el detalle por
- *  mes queda en el balance), así se puede recargar sin acumular historial. */
-async function cargarBalanceAlSistema(id) {
+/** Junta TODOS los meses guardados, revisa que cuadren y carga el inventario
+ *  real: medicamentos con stock del último mes y movimientos de cada mes.
+ *  Borra y reemplaza medicamentos y movimientos. */
+async function cargarTodoAlSistema() {
   if (!estado.usuario?.admin) return;
-  const b = balances.find((x) => x.id === id);
-  if (!b) return;
-  let hojas = (vista.id === id && vista.hojas.length) ? vista.hojas : null;
-  try {
-    if (!hojas) {
-      if (!window.XLSX) await cargarScript(LIB_XLSX);
+  if (!balances.length) return toast("No hay balances cargados.", true);
+  try { if (!window.XLSX) await cargarScript(LIB_XLSX); } catch { return toast("No se pudo cargar el lector de Excel.", true); }
+
+  // período -> hoja de ese mes
+  const porPeriodo = new Map();
+  for (const b of balances) {
+    try {
       const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
-      hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
-    }
-  } catch { return toast("No se pudo leer el balance.", true); }
-  hojas = hojas.filter((h) => h.periodo); // solo meses con período reconocido
-  if (!hojas.length) return toast("No pude reconocer los meses del balance (el título debe decir, p. ej., ABRIL 2026).", true);
-
-  const nom = (it) => [it.desc, it.carac].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  // Catálogo = todos los artículos de todos los meses; atributos y stock del ÚLTIMO mes donde aparece cada uno.
-  const cat = new Map();
-  for (const h of hojas) for (const c of h.cats) for (const it of c.items) {
-    const nombre = nom(it); if (!nombre) continue;
-    const stock = Math.max(0, Number(it.saldo) || 0);
-    cat.set(norm(nombre), { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock });
+      const hs = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+      const h = hs.find((x) => x.periodo === b.periodo) || hs.find((x) => x.periodo);
+      if (h) porPeriodo.set(b.periodo, h);
+    } catch { /* hoja ilegible: se omite */ }
   }
-  if (!cat.size) return toast("No se encontraron medicamentos en el balance.", true);
+  const periodos = [...porPeriodo.keys()].sort();
+  if (!periodos.length) return toast("No pude leer los meses.", true);
 
-  // Movimientos por mes: una entrada y/o una salida por artículo donde haya cantidad.
+  // Catálogo (stock = último mes donde aparece) y datos por artículo/mes para el cuadre
+  const cat = new Map(), porArt = new Map();
+  for (const p of periodos) for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
+    const nombre = nomArt(it); if (!nombre) continue;
+    const key = norm(nombre), saldo = Math.max(0, Number(it.saldo) || 0);
+    cat.set(key, { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock: saldo });
+    let m = porArt.get(key); if (!m) { m = new Map(); porArt.set(key, m); }
+    m.set(p, { ant: Number(it.ant) || 0, ent: Number(it.cantE) || 0, sal: Number(it.cantS) || 0, saldo });
+  }
+
+  // Cuadre: saldo = ant + ent − sal, y el saldo anterior de un mes = cierre del mes previo
+  const descuadres = [];
+  for (const [key, m] of porArt) {
+    let prev = null, prevP = null;
+    for (const p of periodos) {
+      const r = m.get(p); if (!r) continue;
+      if (r.saldo !== r.ant + r.ent - r.sal) descuadres.push(`${cat.get(key)?.nombre} en ${periodoNombre(p)}: saldo ${r.saldo} ≠ ${r.ant}+${r.ent}−${r.sal}`);
+      if (prev && r.ant !== prev.saldo) descuadres.push(`${cat.get(key)?.nombre}: ${periodoNombre(p)} empieza en ${r.ant} pero ${periodoNombre(prevP)} cerró en ${prev.saldo}`);
+      prev = r; prevP = p;
+    }
+  }
+
+  // Plan de movimientos de cada mes
   const movsPlan = [];
-  for (const h of hojas) {
-    const [y, m] = h.periodo.split("-").map(Number);
-    const fecha = Timestamp.fromDate(new Date(y, m - 1, 15, 12));
-    for (const c of h.cats) for (const it of c.items) {
-      const nombre = nom(it); if (!nombre) continue;
-      const base = { key: norm(nombre), nombre, unidad: it.um || "", periodo: h.periodo, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
+  for (const p of periodos) {
+    const [y, mm] = p.split("-").map(Number);
+    const fecha = Timestamp.fromDate(new Date(y, mm - 1, 15, 12));
+    for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
+      const nombre = nomArt(it); if (!nombre) continue;
+      const base = { key: norm(nombre), nombre, unidad: it.um || "", periodo: p, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
       if ((it.cantE || 0) > 0) movsPlan.push({ ...base, tipo: "ingreso", cant: it.cantE, doc: it.docE });
       if ((it.cantS || 0) > 0) movsPlan.push({ ...base, tipo: "despacho", cant: it.cantS, doc: it.docS });
     }
   }
 
-  const ultimo = hojas.at(-1).nombre.toUpperCase();
-  if (!confirm(`Vas a RELLENAR el sistema con el balance completo:\n\n` +
-    `• ${cat.size} medicamentos (stock = saldo del último mes, ${ultimo})\n` +
-    `• ${movsPlan.length} movimientos repartidos en ${hojas.length} meses\n\n` +
-    `Esto BORRA TODO lo que haya ahora (medicamentos y movimientos) y lo reemplaza. Es para la carga inicial.\n\n¿Continuar?`)) return;
+  const ultimo = periodoNombre(periodos.at(-1)).toUpperCase();
+  let msg = `Vas a CARGAR TODO el historial al sistema:\n\n` +
+    `• ${cat.size} medicamentos (stock del último mes: ${ultimo})\n` +
+    `• ${movsPlan.length} movimientos en ${periodos.length} mes(es): ${periodos.map(periodoNombre).join(", ")}\n\n` +
+    `Esto BORRA y reemplaza TODOS los medicamentos y movimientos.`;
+  if (descuadres.length) msg += `\n\n⚠️ ${descuadres.length} descuadre(s) entre meses, por ejemplo:\n- ${descuadres.slice(0, 6).join("\n- ")}\n\nPuedes continuar igual, pero conviene corregir esos meses y volver a subirlos.`;
+  if (!confirm(msg + `\n\n¿Continuar?`)) return;
 
   try {
-    toast("Cargando el balance al sistema… puede tardar un momento.");
+    toast("Cargando el historial al sistema… puede tardar un momento.");
     const u = estado.usuario;
     let batch = writeBatch(db), ops = 0;
     const paso = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
-
-    // 1) Borrar todo lo actual
     for (const m of estado.meds) { batch.delete(doc(db, "medicamentos", m.id)); ops++; await paso(); }
     for (const mv of estado.movs) { batch.delete(doc(db, "movimientos", mv.id)); ops++; await paso(); }
-
-    // 2) Crear los medicamentos y guardar su id por nombre
     const idPorKey = new Map();
     for (const [key, d] of cat) {
       const ref = doc(collection(db, "medicamentos"));
       idPorKey.set(key, ref.id);
-      batch.set(ref, {
-        nombre: d.nombre, unidad: d.unidad, presentacion: "", via: "", categoria: d.categoria,
+      batch.set(ref, { nombre: d.nombre, unidad: d.unidad, presentacion: "", via: "", categoria: d.categoria,
         lotes: d.stock > 0 ? [{ venc: d.venc, cant: d.stock }] : [], stock: d.stock,
-        creado: serverTimestamp(), actualizado: serverTimestamp(),
-      });
+        creado: serverTimestamp(), actualizado: serverTimestamp() });
       ops++; await paso();
     }
-
-    // 3) Crear los movimientos de cada mes
     for (const mv of movsPlan) {
       const medId = idPorKey.get(mv.key); if (!medId) continue;
-      const ref = doc(collection(db, "movimientos"));
-      batch.set(ref, {
+      batch.set(doc(collection(db, "movimientos")), {
         tipo: mv.tipo, periodo: mv.periodo, fecha: mv.fecha, medId,
         nombre: mv.nombre, unidad: mv.unidad, presentacion: "",
         cantidad: mv.cant, lotes: [{ venc: mv.venc, cant: mv.cant }],
@@ -1987,7 +2001,7 @@ async function cargarBalanceAlSistema(id) {
       ops++; await paso();
     }
     if (ops) await batch.commit();
-    exito(`Listo: ${cat.size} medicamentos y ${movsPlan.length} movimientos cargados \u2714`);
+    exito(`Listo: ${cat.size} medicamentos y ${movsPlan.length} movimientos (${periodos.length} meses) ✔`);
   } catch (er) {
     toast(er.code === "permission-denied"
       ? "Permiso denegado. Revisa que publicaste las reglas de Firestore (incluida la línea que deja al admin borrar movimientos)."
@@ -1996,36 +2010,35 @@ async function cargarBalanceAlSistema(id) {
 }
 
 function pintarSaldos() {
-  // La lista de balances guardados en el sistema
   const abierto = vista.id && balances.find((b) => b.id === vista.id);
+  $("btn-cargar-todo").classList.toggle("oculto", !(estado.usuario?.admin && balances.length));
   $("saldos-lista").innerHTML = balances.length
     ? balances.map((b) => `
         <div class="balance-item${b.id === vista.id ? " abierto" : ""}">
           <button class="balance-abrir" data-abrir="${b.id}">
-            <span class="bal-nombre">📑 ${esc(b.nombre)}</span>
-            <small>${(b.meses || []).length} mes(es)${b.por ? ` · subió ${esc(b.por)}` : ""}${fmtFecha(b.subido) ? ` · ${fmtFecha(b.subido)}` : ""}</small>
+            <span class="bal-nombre">📑 ${esc(b.mes || periodoNombre(b.periodo))}</span>
+            <small>${esc(b.archivo || "")}${b.por ? ` · subió ${esc(b.por)}` : ""}${fmtFecha(b.subido) ? ` · ${fmtFecha(b.subido)}` : ""}</small>
           </button>
           <span class="balance-acc">
             <button class="btn mini" data-ver="${b.id}">👁 Ver en Excel</button>
             <button class="btn mini" data-descargar="${b.id}">⬇ Descargar</button>
-            <button class="btn mini primario solo-admin" data-cargar="${b.id}">⬆ Cargar al sistema</button>
             <button class="btn mini peligro solo-admin" data-eliminar="${b.id}">Eliminar</button>
           </span>
         </div>`).join("")
-    : `<p class="vacio">Aún no hay balances en el sistema.<br><small>El administrador los agrega con “Agregar nuevo balance”.</small></p>`;
+    : `<p class="vacio">Aún no hay meses cargados.<br><small>El administrador los sube con “Agregar nuevo balance”, un archivo por mes.</small></p>`;
 
   const cont = $("lista-saldos");
   if (!abierto) {
     $("saldos-hojas").innerHTML = "";
     $("buscar-saldos").classList.add("oculto");
-    cont.innerHTML = balances.length ? `<p class="vacio">Elige un balance de la lista para verlo.</p>` : "";
+    cont.innerHTML = balances.length ? `<p class="vacio">Elige un mes de la lista para verlo.</p>` : "";
     return;
   }
   $("buscar-saldos").classList.remove("oculto");
   if (!vista.hojas.length) { cont.innerHTML = `<p class="vacio">Abriendo…</p>`; return; }
   vista.hoja = Math.min(vista.hoja, vista.hojas.length - 1);
-  $("saldos-hojas").innerHTML = vista.hojas.map((h, i) =>
-    `<button class="btn chip${i === vista.hoja ? " activa" : ""}" data-hoja="${i}">${esc(h.nombre.toUpperCase())}</button>`).join("");
+  $("saldos-hojas").innerHTML = vista.hojas.length > 1 ? vista.hojas.map((h, i) =>
+    `<button class="btn chip${i === vista.hoja ? " activa" : ""}" data-hoja="${i}">${esc(h.nombre.toUpperCase())}</button>`).join("") : "";
   const h = vista.hojas[vista.hoja];
   const q = norm($("buscar-saldos").value.trim());
   const hoy = new Date().toISOString().slice(0, 10);
@@ -2054,7 +2067,7 @@ function pintarSaldos() {
     }).join("");
   }).join("");
   cont.innerHTML = `
-    <p class="nota">📄 ${esc(h.titulo || vista.nombre)}</p>
+    <p class="nota">📄 ${esc(h.titulo || vista.mes)}</p>
     ${h.aviso ? `<p class="nota aviso-saldos">⚠️ ${esc(h.aviso)}</p>` : ""}
     <div class="totales"><div><small>Artículos</small><b>${total}</b></div>
       <div class="ing"><small>Entradas</small><b>${entradas}</b></div>
@@ -2075,16 +2088,15 @@ $("input-saldos").addEventListener("change", (e) => {
   e.target.value = "";
   if (f) subirBalance(f);
 });
+$("btn-cargar-todo").addEventListener("click", cargarTodoAlSistema);
 $("saldos-lista").addEventListener("click", (e) => {
   const abrir = e.target.closest("[data-abrir]");
   const ver = e.target.closest("[data-ver]");
   const desc = e.target.closest("[data-descargar]");
-  const carga = e.target.closest("[data-cargar]");
   const elim = e.target.closest("[data-eliminar]");
   if (abrir) return abrirBalance(abrir.dataset.abrir);
   if (ver) return verBalanceExcel(ver.dataset.ver);
   if (desc) return descargarBalance(desc.dataset.descargar);
-  if (carga) return cargarBalanceAlSistema(carga.dataset.cargar);
   if (elim) return eliminarBalance(elim.dataset.eliminar);
 });
 $("saldos-hojas").addEventListener("click", (e) => {
@@ -2245,7 +2257,7 @@ onAuthStateChanged(auth, async (user) => {
       if (estado.seccion === "movimientos") pintarMovimientos();
     }),
     onSnapshot(collection(db, "saldos"), (s) => {
-      balances = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.subido?.seconds || 0) - (a.subido?.seconds || 0));
+      balances = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.periodo || a.id).localeCompare(b.periodo || b.id));
       if (vista.id && !balances.find((b) => b.id === vista.id)) { vista.id = null; vista.hojas = []; }
       if (estado.seccion === "saldos") pintarSaldos();
     }),
