@@ -300,10 +300,14 @@ function paginador(sec, pag, total) {
   <p class="nota centro">Medicamentos ${desde} a ${hasta} de ${total}</p>`;
 }
 
+let filtroControl = "todos"; // todos | con | sin (solo Control visible)
 function pintarTablaMeds(sec) {
   const q = $(`buscar-${sec}`).value;
   const cont = $(`lista-${sec}`);
-  const { lista, aproximado } = buscar(q);
+  let { lista, aproximado } = buscar(q);
+  if (sec === "control" && filtroControl !== "todos") {
+    lista = lista.filter((m) => filtroControl === "con" ? (m.stock || 0) > 0 : (m.stock || 0) <= 0);
+  }
   const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
   const pag = (pagina[sec] = Math.min(Math.max(1, pagina[sec]), paginas));
   if (!lista.length) {
@@ -2095,12 +2099,12 @@ function tablaSaldoHTML(h, q = "", filtro = "todos") {
 }
 
 /** Panel de SALDO por mes dentro de Movimientos (lo ven todos los usuarios). */
-const saldoMov = { id: null, hoja: null, filtro: "todos" };
+const saldoMov = { id: null, hoja: null };
 
 function renderSaldoMov() {
   if (!saldoMov.hoja) { $("saldo-vista").innerHTML = `<p class="vacio">Sin datos de este mes</p>`; return; }
   const h = saldoMov.hoja;
-  $("saldo-vista").innerHTML = `<p class="nota">📄 ${esc(h.titulo || "")}</p>` + tablaSaldoHTML(h, $("saldo-buscar").value, saldoMov.filtro);
+  $("saldo-vista").innerHTML = `<p class="nota">📄 ${esc(h.titulo || "")}</p>` + tablaSaldoHTML(h);
 }
 
 async function pintarSaldoMovimientos() {
@@ -2184,12 +2188,12 @@ $("saldos-hojas").addEventListener("click", (e) => {
   pintarSaldos();
 });
 $("saldo-mes").addEventListener("change", pintarSaldoMovimientos);
-$("saldo-buscar").addEventListener("input", renderSaldoMov);
-$("saldo-filtro").addEventListener("click", (e) => {
+$("control-filtro").addEventListener("click", (e) => {
   const b = e.target.closest("[data-filtro]"); if (!b) return;
-  saldoMov.filtro = b.dataset.filtro;
-  $("saldo-filtro").querySelectorAll(".chip").forEach((x) => x.classList.toggle("activa", x === b));
-  renderSaldoMov();
+  filtroControl = b.dataset.filtro;
+  pagina.control = 1;
+  $("control-filtro").querySelectorAll(".chip").forEach((x) => x.classList.toggle("activa", x === b));
+  pintarTablaMeds("control");
 });
 $("saldo-excel").addEventListener("click", () => { const id = $("saldo-mes").value; if (id) descargarBalance(id); });
 $("saldo-pdf").addEventListener("click", () => { const id = $("saldo-mes").value; if (id) descargarBalancePDF(id); });
