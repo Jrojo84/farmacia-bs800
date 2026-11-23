@@ -1934,13 +1934,23 @@ async function cargarTodoAlSistema() {
   if (!periodos.length) return toast("No pude leer los meses.", true);
 
   // Catálogo (stock = último mes donde aparece) y datos por artículo/mes para el cuadre
-  const cat = new Map(), porArt = new Map();
+  // Catálogo = SOLO el último mes y SOLO lo que tenga stock mayor a 0
+  // (lo agotado o que ya no figura en el último mes no se crea).
+  const ultPeriodo = periodos.at(-1);
+  const cat = new Map();
+  for (const c of porPeriodo.get(ultPeriodo).cats) for (const it of c.items) {
+    const nombre = nomArt(it); if (!nombre) continue;
+    const saldo = Math.max(0, Number(it.saldo) || 0);
+    if (saldo <= 0) continue;
+    cat.set(norm(nombre), { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock: saldo });
+  }
+  // Datos por mes de esos medicamentos, para revisar el cuadre
+  const porArt = new Map();
   for (const p of periodos) for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
     const nombre = nomArt(it); if (!nombre) continue;
-    const key = norm(nombre), saldo = Math.max(0, Number(it.saldo) || 0);
-    cat.set(key, { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock: saldo });
+    const key = norm(nombre); if (!cat.has(key)) continue;
     let m = porArt.get(key); if (!m) { m = new Map(); porArt.set(key, m); }
-    m.set(p, { ant: Number(it.ant) || 0, ent: Number(it.cantE) || 0, sal: Number(it.cantS) || 0, saldo });
+    m.set(p, { ant: Number(it.ant) || 0, ent: Number(it.cantE) || 0, sal: Number(it.cantS) || 0, saldo: Math.max(0, Number(it.saldo) || 0) });
   }
 
   // Cuadre: saldo = ant + ent − sal, y el saldo anterior de un mes = cierre del mes previo
@@ -1962,7 +1972,8 @@ async function cargarTodoAlSistema() {
     const fecha = Timestamp.fromDate(new Date(y, mm - 1, 15, 12));
     for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
       const nombre = nomArt(it); if (!nombre) continue;
-      const base = { key: norm(nombre), nombre, unidad: it.um || "", periodo: p, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
+      const key = norm(nombre); if (!cat.has(key)) continue; // solo medicamentos que existen hoy
+      const base = { key, nombre, unidad: it.um || "", periodo: p, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
       if ((it.cantE || 0) > 0) movsPlan.push({ ...base, tipo: "ingreso", cant: it.cantE, doc: it.docE });
       if ((it.cantS || 0) > 0) movsPlan.push({ ...base, tipo: "despacho", cant: it.cantS, doc: it.docS });
     }
@@ -2045,6 +2056,7 @@ async function reestablecerTodo() {
 
 function pintarSaldos() {
   const abierto = vista.id && balances.find((b) => b.id === vista.id);
+  $("btn-cargar").classList.toggle("oculto", !(estado.usuario?.admin && balances.length));
   $("saldos-lista").innerHTML = balances.length
     ? balances.map((b) => `
         <div class="balance-item${b.id === vista.id ? " abierto" : ""}">
@@ -2055,7 +2067,6 @@ function pintarSaldos() {
           <span class="balance-acc">
             <button class="btn mini" data-excel="${b.id}">⬇ Excel</button>
             <button class="btn mini" data-pdf="${b.id}">⬇ PDF</button>
-            <button class="btn mini primario solo-admin" data-cargar="${b.id}">⬆ Cargar al sistema</button>
             <button class="btn mini peligro solo-admin" data-eliminar="${b.id}">Eliminar</button>
           </span>
         </div>`).join("")
@@ -2115,16 +2126,15 @@ $("input-saldos").addEventListener("change", (e) => {
   e.target.value = "";
   if (f) subirBalance(f);
 });
+$("btn-cargar").addEventListener("click", cargarTodoAlSistema);
 $("btn-reset-todo").addEventListener("click", reestablecerTodo);
 $("saldos-lista").addEventListener("click", (e) => {
   const abrir = e.target.closest("[data-abrir]");
   const excel = e.target.closest("[data-excel]");
   const pdf = e.target.closest("[data-pdf]");
-  const carga = e.target.closest("[data-cargar]");
   const elim = e.target.closest("[data-eliminar]");
   if (excel) return descargarBalance(excel.dataset.excel);
   if (pdf) return descargarBalancePDF(pdf.dataset.pdf);
-  if (carga) return cargarTodoAlSistema();
   if (elim) return eliminarBalance(elim.dataset.eliminar);
   if (abrir) return abrirBalance(abrir.dataset.abrir);
 });
