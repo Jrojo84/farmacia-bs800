@@ -425,8 +425,8 @@ body:not(.es-admin) .solo-admin { display: none; }
 .btn.chip.activa { background: var(--verde); border-color: var(--verde); color: #fff; }
 label#btn-agregar-balance { cursor: pointer; -webkit-user-select: none; user-select: none; }
 /* Los botones de la barra de Saldos (Agregar / Borrar) con el mismo alto y relleno */
-#sec-saldos .acciones { align-items: stretch; }
-#sec-saldos .acciones > .btn { flex: 1 1 150px; min-height: 46px; padding: 10px 16px; line-height: 1.2; text-align: center; }
+#sec-saldos .acciones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
+#sec-saldos .acciones > .btn { width: 100%; min-height: 48px; padding: 10px 12px; line-height: 1.2; text-align: center; margin: 0; }
 .excel-grid { overflow: auto; max-height: 70vh; border: 1px solid var(--borde); border-radius: 8px; }
 .excel-grid table { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
 .excel-grid td { border: 1px solid #c9cfc6; padding: 3px 6px; min-width: 40px; }
@@ -487,6 +487,12 @@ label#btn-agregar-balance { cursor: pointer; -webkit-user-select: none; user-sel
 
 /* ---------- Celular (todas las medidas) ---------- */
 @media (max-width: 760px) {
+  .tabla .nombre { font-size: 13px; }
+  .tabla.saldos { font-size: 12px; }
+  .tabla.saldos .nombre { min-width: 110px; }
+  .tabla.saldos td { padding: 6px 5px; }
+  #sec-saldos .acciones { grid-template-columns: 1fr; }
+
   :root { --lateral: 0px; --escudo: 50px; --alto-barra: 68px; --alto-pie: 30px; --alto-menu: 104px; }
   /* El contenido y el buscador empiezan debajo de la barra y del menú */
   .contenido { padding-top: calc(var(--alto-barra) + var(--alto-menu) + env(safe-area-inset-top)); }

@@ -1938,14 +1938,13 @@ async function cargarTodoAlSistema() {
   if (!periodos.length) return toast("No pude leer los meses.", true);
 
   // Catálogo (stock = último mes donde aparece) y datos por artículo/mes para el cuadre
-  // Catálogo = SOLO el último mes y SOLO lo que tenga stock mayor a 0
-  // (lo agotado o que ya no figura en el último mes no se crea).
+  // Catálogo = SOLO el último mes (todos sus artículos, incluidos los que
+  // están en 0); lo que ya no figura en el último mes no se crea.
   const ultPeriodo = periodos.at(-1);
   const cat = new Map();
   for (const c of porPeriodo.get(ultPeriodo).cats) for (const it of c.items) {
     const nombre = nomArt(it); if (!nombre) continue;
     const saldo = Math.max(0, Number(it.saldo) || 0);
-    if (saldo <= 0) continue;
     cat.set(norm(nombre), { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock: saldo });
   }
   // Datos por mes de esos medicamentos, para revisar el cuadre
