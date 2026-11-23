@@ -2055,11 +2055,17 @@ async function reestablecerTodo() {
 }
 
 /** Devuelve el HTML de la tabla de saldo de una hoja (reutilizado en Saldos y Movimientos). */
-function tablaSaldoHTML(h, q = "") {
+function tablaSaldoHTML(h, q = "", filtro = "todos") {
   const nq = norm(String(q).trim());
   const hoy = new Date().toISOString().slice(0, 10);
+  const pasa = (it) => {
+    const sal = Number(it.saldo) || 0;
+    if (filtro === "con" && sal <= 0) return false;
+    if (filtro === "sin" && sal > 0) return false;
+    return !nq || norm(`${it.desc} ${it.carac} ${it.um} ${it.docE} ${it.docS}`).includes(nq);
+  };
   const cuerpo = h.cats.map((c) => {
-    const items = c.items.filter((it) => !nq || norm(`${it.desc} ${it.carac} ${it.um} ${it.docE} ${it.docS}`).includes(nq));
+    const items = c.items.filter(pasa);
     if (!items.length) return "";
     return `<tr class="cat"><td colspan="11">${esc(c.nombre)} <small>${items.length}</small></td></tr>` + items.map((it) => {
       const vencido = it.venc.iso && it.venc.iso < hoy;
@@ -2089,22 +2095,32 @@ function tablaSaldoHTML(h, q = "") {
 }
 
 /** Panel de SALDO por mes dentro de Movimientos (lo ven todos los usuarios). */
+const saldoMov = { id: null, hoja: null, filtro: "todos" };
+
+function renderSaldoMov() {
+  if (!saldoMov.hoja) { $("saldo-vista").innerHTML = `<p class="vacio">Sin datos de este mes</p>`; return; }
+  const h = saldoMov.hoja;
+  $("saldo-vista").innerHTML = `<p class="nota">📄 ${esc(h.titulo || "")}</p>` + tablaSaldoHTML(h, $("saldo-buscar").value, saldoMov.filtro);
+}
+
 async function pintarSaldoMovimientos() {
   const panel = $("mov-saldo");
   panel.classList.toggle("oculto", !balances.length);
-  if (!balances.length) { $("saldo-vista").innerHTML = ""; return; }
+  if (!balances.length) { saldoMov.id = null; saldoMov.hoja = null; $("saldo-vista").innerHTML = ""; return; }
   const sel = $("saldo-mes");
   const ops = balances.map((b) => `<option value="${b.id}">${esc(b.mes || periodoNombre(b.periodo))}</option>`).join("");
   if (sel.dataset.ops !== ops) { sel.innerHTML = ops; sel.dataset.ops = ops; }
   if (!balances.find((b) => b.id === sel.value)) sel.value = balances.at(-1).id; // por defecto, el último mes
   const b = balances.find((x) => x.id === sel.value);
+  if (saldoMov.id === b.id && saldoMov.hoja) return renderSaldoMov(); // ya está leído
   $("saldo-vista").innerHTML = `<p class="vacio">Cargando ${esc(b.mes || periodoNombre(b.periodo))}…</p>`;
   try {
     if (!window.XLSX) await cargarScript(LIB_XLSX);
     const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
     const hs = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
-    const h = hs.find((x) => x.periodo === b.periodo) || hs[0];
-    $("saldo-vista").innerHTML = (h ? `<p class="nota">📄 ${esc(h.titulo || b.mes || "")}</p>` + tablaSaldoHTML(h) : `<p class="vacio">Sin datos</p>`);
+    saldoMov.id = b.id;
+    saldoMov.hoja = hs.find((x) => x.periodo === b.periodo) || hs[0] || null;
+    renderSaldoMov();
   } catch { $("saldo-vista").innerHTML = `<p class="vacio">No se pudo abrir el mes.</p>`; }
 }
 
@@ -2119,8 +2135,6 @@ function pintarSaldos() {
             <small>${esc(b.archivo || "")}${b.por ? ` · subió ${esc(b.por)}` : ""}${fmtFecha(b.subido) ? ` · ${fmtFecha(b.subido)}` : ""}</small>
           </button>
           <span class="balance-acc">
-            <button class="btn mini" data-excel="${b.id}">⬇ Excel</button>
-            <button class="btn mini" data-pdf="${b.id}">⬇ PDF</button>
             <button class="btn mini peligro solo-admin" data-eliminar="${b.id}">Eliminar</button>
           </span>
         </div>`).join("")
@@ -2170,6 +2184,13 @@ $("saldos-hojas").addEventListener("click", (e) => {
   pintarSaldos();
 });
 $("saldo-mes").addEventListener("change", pintarSaldoMovimientos);
+$("saldo-buscar").addEventListener("input", renderSaldoMov);
+$("saldo-filtro").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-filtro]"); if (!b) return;
+  saldoMov.filtro = b.dataset.filtro;
+  $("saldo-filtro").querySelectorAll(".chip").forEach((x) => x.classList.toggle("activa", x === b));
+  renderSaldoMov();
+});
 $("saldo-excel").addEventListener("click", () => { const id = $("saldo-mes").value; if (id) descargarBalance(id); });
 $("saldo-pdf").addEventListener("click", () => { const id = $("saldo-mes").value; if (id) descargarBalancePDF(id); });
 $("buscar-saldos").addEventListener("input", pintarSaldos);
