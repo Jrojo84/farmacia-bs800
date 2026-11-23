@@ -1733,7 +1733,12 @@ const LIB_XLSX = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.m
 const MAX_BALANCE = 700 * 1024; // Firestore guarda ~1 MB por registro; el Excel debe ser menor
 
 const txt = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
-const numOVacio = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
+// Número de una celda; cualquier cosa que no sea un número (texto, "x", símbolos) queda en vacío.
+const numOVacio = (v) => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(/[^\d.\-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
 
 /** Fecha de Excel (número de serie o texto) → "MM/AAAA" (las caducidades son por mes). */
 function mesAnio(v) {
@@ -1755,14 +1760,19 @@ function leerHojaSaldo(nombre, ws) {
   if (iCab < 0) return null;
   const titulo = txt(filas.slice(0, iCab).flat().find((c) => /SALDO/i.test(String(c ?? ""))));
   const cats = [];
-  for (const r of filas.slice(iCab + 2)) {
-    const [n, desc, carac, um, venc, ant, docE, cantE, docS, cantS, saldo] = r;
-    if (!txt(desc)) continue;
-    const esCategoria = (n === null || n === "") && !txt(um) && /^[A-Z]\.\s/.test(txt(desc));
-    if (esCategoria || !cats.length) cats.push({ nombre: esCategoria ? txt(desc) : "Sin categoría", items: [] });
-    if (esCategoria) continue;
+  for (const fila of filas.slice(iCab + 2)) {
+    // Solo las 11 columnas de la tabla; lo que haya a la derecha se ignora.
+    const [n, desc, carac, um, venc, ant, docE, cantE, docS, cantS, saldo] = fila.slice(0, 11);
+    const d = txt(desc);
+    if (!d) continue;                                   // fila sin descripción: fuera
+    // Encabezado de categoría: "A. MEDICINAS", "B. MATERIAL MEDICO", etc. (sin N° ni U/M)
+    if ((n === null || n === "") && !txt(um) && /^[A-Z]\.\s/.test(d)) { cats.push({ nombre: d, items: [] }); continue; }
+    // Artículo real: debe tener N° (1, 2, 3…). Notas, totales o marcas sueltas ("x") se ignoran.
+    const num = typeof n === "number" ? n : parseInt(String(n).replace(/\D/g, ""), 10);
+    if (!Number.isFinite(num)) continue;
+    if (!cats.length) cats.push({ nombre: "Sin categoría", items: [] });
     cats.at(-1).items.push({
-      n: txt(n), desc: txt(desc), carac: txt(carac), um: txt(um), venc: mesAnio(venc),
+      n: String(num), desc: d, carac: txt(carac), um: txt(um), venc: mesAnio(venc),
       ant: numOVacio(ant), docE: txt(docE), cantE: numOVacio(cantE), docS: txt(docS), cantS: numOVacio(cantS), saldo: numOVacio(saldo),
     });
   }
