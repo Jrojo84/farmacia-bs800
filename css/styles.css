@@ -443,6 +443,9 @@ label#btn-agregar-balance { cursor: pointer; -webkit-user-select: none; user-sel
 .btn.mini.peligro { background: #fff; color: var(--rojo); border: 1px solid var(--rojo); }
 .btn.peligro { background: #fff; color: var(--rojo); border: 1px solid var(--rojo); }
 .mov-saldo { margin-bottom: 16px; }
+.descargas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; }
+.btn.descarga { width: 100%; min-height: 46px; background: var(--verde); border-color: var(--verde); color: #fff; }
+
 .sub-sec { margin: 6px 0 8px; font-size: 18px; color: var(--verde); }
 .mov-saldo .barra-busqueda.fila { position: static; }
 .mov-saldo #saldo-vista { max-height: 60vh; overflow: auto; }

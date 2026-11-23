@@ -1250,17 +1250,6 @@ function pintarMovimientos() {
     }).join("")}</tbody>
   </table></div>`;
 }
-$("mov-periodo").addEventListener("change", (e) => { estado.periodoMov = e.target.value; pintarMovimientos(); });
-$("lista-movimientos").addEventListener("click", async (e) => {
-  const corr = e.target.closest("[data-corregir]")?.dataset.corregir;
-  if (corr) return abrirCorregir(estado.movs.find((x) => x.id === corr));
-  const id = e.target.closest("[data-anular]")?.dataset.anular;
-  const mv = id && estado.movs.find((x) => x.id === id);
-  if (!mv) return;
-  if (!confirm(`¿Anular el ingreso de ${cantidadVigente(mv)} de ${mv.nombre}${mv.acta ? ` (acta ${mv.acta})` : ""}?\n\nSe descontará del stock y quedará registrado como anulación.`)) return;
-  await anularIngreso(mv);
-});
-$("buscar-mov").addEventListener("input", pintarMovimientos);
 
 // =====================================================================
 //  DESCARGAR PDF (desde Movimientos): total general del mes o por medicamento
@@ -1443,34 +1432,6 @@ async function pdfMedicamento(m, P) {
   });
   pdf.save(`control-${norm(m.nombre).replace(/[^a-z0-9]+/g, "-")}-${P}.pdf`);
 }
-
-$("btn-pdf").addEventListener("click", () => {
-  const P = estado.periodoMov;
-  const c = abrirModal("Descargar PDF", `
-    <p class="centro nota">Mes: <b>${periodoNombre(P)}</b> (${periodoRango(P)})<br>Para otro mes, cámbialo en la lista de Movimientos.</p>
-    <button id="pdf-general" class="btn primario grande">Total general del mes</button>
-    <p class="subtitulo centro">o por medicamento</p>
-    <input id="pdf-buscar" class="buscar" type="search" placeholder="Buscar medicamento…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-    <div id="pdf-lista" class="lista-pdf"></div>`);
-  const descargar = async (boton, fn) => {
-    const texto = boton.innerHTML;
-    boton.disabled = true; boton.textContent = "Generando PDF…";
-    try { await fn(); cerrarModal(); toast("PDF descargado ✔"); }
-    catch (err) { toast(err.message || "No se pudo generar el PDF", true); boton.disabled = false; boton.innerHTML = texto; }
-  };
-  const pintar = () => {
-    c.querySelector("#pdf-lista").innerHTML = buscar(c.querySelector("#pdf-buscar").value).lista.map((m) =>
-      `<button class="btn" data-pdf="${m.id}"><span>${esc(m.nombre)}<small>${esc(presDe(m))}</small></span><span class="ir">PDF</span></button>`).join("")
-      || `<p class="nota centro">Sin resultados</p>`;
-  };
-  pintar();
-  c.querySelector("#pdf-buscar").addEventListener("input", pintar);
-  c.querySelector("#pdf-general").addEventListener("click", (e) => descargar(e.currentTarget, () => pdfGeneral(P)));
-  c.querySelector("#pdf-lista").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-pdf]");
-    if (b) descargar(b, () => pdfMedicamento(medPorId(b.dataset.pdf), P));
-  });
-});
 
 // =====================================================================
 //  INICIO DE SESIÓN y SOLICITUD DE REGISTRO
@@ -1938,20 +1899,25 @@ async function cargarTodoAlSistema() {
   if (!periodos.length) return toast("No pude leer los meses.", true);
 
   // Catálogo (stock = último mes donde aparece) y datos por artículo/mes para el cuadre
-  // Catálogo = SOLO el último mes (todos sus artículos, incluidos los que
-  // están en 0); lo que ya no figura en el último mes no se crea.
   const ultPeriodo = periodos.at(-1);
-  const cat = new Map();
+  // Saldo del último mes por artículo (0 si ya no figura en el último mes)
+  const saldoUlt = new Map();
   for (const c of porPeriodo.get(ultPeriodo).cats) for (const it of c.items) {
-    const nombre = nomArt(it); if (!nombre) continue;
-    const saldo = Math.max(0, Number(it.saldo) || 0);
-    cat.set(norm(nombre), { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock: saldo });
+    const n = nomArt(it); if (n) saldoUlt.set(norm(n), Math.max(0, Number(it.saldo) || 0));
   }
-  // Datos por mes de esos medicamentos, para revisar el cuadre
+  // Catálogo = TODOS los artículos de todos los meses (aunque ya no sigan en
+  // el último mes). El stock es el del último mes (0 si ya no figura).
+  const cat = new Map();
+  for (const p of periodos) for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
+    const nombre = nomArt(it); if (!nombre) continue;
+    const key = norm(nombre);
+    cat.set(key, { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock: saldoUlt.get(key) || 0 });
+  }
+  // Datos por mes (solo de los que siguen en el último mes) para revisar el cuadre
   const porArt = new Map();
   for (const p of periodos) for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
     const nombre = nomArt(it); if (!nombre) continue;
-    const key = norm(nombre); if (!cat.has(key)) continue;
+    const key = norm(nombre); if (!saldoUlt.has(key)) continue;
     let m = porArt.get(key); if (!m) { m = new Map(); porArt.set(key, m); }
     m.set(p, { ant: Number(it.ant) || 0, ent: Number(it.cantE) || 0, sal: Number(it.cantS) || 0, saldo: Math.max(0, Number(it.saldo) || 0) });
   }
@@ -1975,7 +1941,7 @@ async function cargarTodoAlSistema() {
     const fecha = Timestamp.fromDate(new Date(y, mm - 1, 15, 12));
     for (const c of porPeriodo.get(p).cats) for (const it of c.items) {
       const nombre = nomArt(it); if (!nombre) continue;
-      const key = norm(nombre); if (!cat.has(key)) continue; // solo medicamentos que existen hoy
+      const key = norm(nombre); if (!saldoUlt.has(key)) continue; // movimientos solo de los que siguen en el último mes
       const base = { key, nombre, unidad: it.um || "", periodo: p, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
       if ((it.cantE || 0) > 0) movsPlan.push({ ...base, tipo: "ingreso", cant: it.cantE, doc: it.docE });
       if ((it.cantS || 0) > 0) movsPlan.push({ ...base, tipo: "despacho", cant: it.cantS, doc: it.docS });
@@ -2103,12 +2069,13 @@ const saldoMov = { id: null, hoja: null };
 function renderSaldoMov() {
   if (!saldoMov.hoja) { $("saldo-vista").innerHTML = `<p class="vacio">Sin datos de este mes</p>`; return; }
   const h = saldoMov.hoja;
-  $("saldo-vista").innerHTML = `<p class="nota">📄 ${esc(h.titulo || "")}</p>` + tablaSaldoHTML(h);
+  $("saldo-vista").innerHTML = `<p class="nota">📄 ${esc(h.titulo || "")}</p>` + tablaSaldoHTML(h, $("saldo-buscar").value);
 }
 
 async function pintarSaldoMovimientos() {
   const panel = $("mov-saldo");
   panel.classList.toggle("oculto", !balances.length);
+  $("mov-vacio").classList.toggle("oculto", !!balances.length);
   if (!balances.length) { saldoMov.id = null; saldoMov.hoja = null; $("saldo-vista").innerHTML = ""; return; }
   const sel = $("saldo-mes");
   const ops = balances.map((b) => `<option value="${b.id}">${esc(b.mes || periodoNombre(b.periodo))}</option>`).join("");
@@ -2187,6 +2154,7 @@ $("saldos-hojas").addEventListener("click", (e) => {
   pintarSaldos();
 });
 $("saldo-mes").addEventListener("change", pintarSaldoMovimientos);
+$("saldo-buscar").addEventListener("input", renderSaldoMov);
 $("control-filtro").addEventListener("click", (e) => {
   const b = e.target.closest("[data-filtro]"); if (!b) return;
   filtroControl = b.dataset.filtro;
@@ -2205,7 +2173,7 @@ const PINTAR = {
   despacho: pintarDespacho,
   ingreso: () => pintarTablaMeds("ingreso"),
   control: () => pintarTablaMeds("control"),
-  movimientos: pintarMovimientos,
+  movimientos: pintarSaldoMovimientos,
   usuarios: pintarUsuarios,
   saldos: pintarSaldos,
 };
@@ -2215,7 +2183,6 @@ function irA(sec) {
   document.querySelectorAll(".seccion").forEach((s) => s.classList.toggle("oculto", s.id !== `sec-${sec}`));
   document.querySelectorAll(".menu button").forEach((b) => b.classList.toggle("activa", b.dataset.sec === sec));
   PINTAR[sec]();
-  if (sec === "movimientos") pintarSaldoMovimientos();
   window.scrollTo(0, 0);
 }
 document.querySelector(".menu").addEventListener("click", (e) => {
@@ -2346,7 +2313,6 @@ onAuthStateChanged(auth, async (user) => {
       estado.movs = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       cargado.movs = true;
       revisarAvisos();
-      if (estado.seccion === "movimientos") pintarMovimientos();
     }),
     onSnapshot(collection(db, "saldos"), (s) => {
       balances = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.periodo || a.id).localeCompare(b.periodo || b.id));

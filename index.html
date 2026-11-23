@@ -145,19 +145,17 @@
           <h3 class="sub-sec">Saldo por mes</h3>
           <div class="barra-busqueda fila">
             <select id="saldo-mes" aria-label="Mes del saldo"></select>
-            <button id="saldo-excel" class="btn">⬇ Excel</button>
-            <button id="saldo-pdf" class="btn primario">⬇ PDF</button>
+          </div>
+          <div class="descargas">
+            <button id="saldo-excel" class="btn descarga">⬇ Excel</button>
+            <button id="saldo-pdf" class="btn descarga">⬇ PDF</button>
+          </div>
+          <div class="barra-busqueda">
+            <input id="saldo-buscar" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar medicamento…">
           </div>
           <div id="saldo-vista"></div>
         </div>
-        <div class="barra-busqueda fila">
-          <select id="mov-periodo" aria-label="Mes"></select>
-          <input id="buscar-mov" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Medicamento, paciente, DNI, acta…">
-          <button id="btn-pdf" class="btn primario">Descargar PDF</button>
-        </div>
-        <p id="mov-rango" class="nota"></p>
-        <div id="mov-totales" class="totales"></div>
-        <div id="lista-movimientos"></div>
+        <p id="mov-vacio" class="vacio oculto">Aún no hay balances cargados.</p>
       </div>
 
       <!-- SALDOS / BALANCES: Excel guardado en el sistema (ver y descargar) -->
