@@ -1833,7 +1833,8 @@ async function subirBalance(file) {
     }
     vista.id = conMes.at(-1).periodo; vista.hoja = 0; vista.hojas = [];
     const nombres = conMes.map((h) => periodoNombre(h.periodo)).join(", ");
-    toast(`Guardado: ${nombres}` + (sinMes.length ? ` (se omitieron ${sinMes.length} hoja(s) sin mes reconocido)` : ""));
+    exito(`Carga exitosa ✔\n${conMes.length > 1 ? "Meses guardados" : "Mes guardado"} en el sistema: ${nombres}`);
+    if (sinMes.length) toast(`Se omitieron ${sinMes.length} hoja(s) sin mes reconocido`, true);
   } catch (er) {
     toast(er.code === "permission-denied"
       ? "Solo el administrador puede agregar balances (o faltan los permisos en Firebase)."

@@ -455,7 +455,7 @@ label#btn-agregar-balance { display: inline-flex; align-items: center; justify-c
 .exito { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.25); padding: 16px; }
 .exito > div { background: #fff; border-radius: 18px; padding: 28px 32px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.25); max-width: 420px; animation: aparecer .2s ease-out; }
 .exito span { display: inline-flex; width: 64px; height: 64px; border-radius: 50%; background: var(--verde); color: #fff; font-size: 34px; align-items: center; justify-content: center; }
-.exito p { font-size: 20px; font-weight: 700; color: var(--verde); margin: 14px 0 0; }
+.exito p { font-size: 20px; font-weight: 700; color: var(--verde); margin: 14px 0 0; white-space: pre-line; }
 @keyframes aparecer { from { transform: scale(.9); opacity: 0; } }
 
 .toast {
