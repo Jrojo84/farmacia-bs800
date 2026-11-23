@@ -423,7 +423,9 @@ body:not(.es-admin) .solo-admin { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
 .btn.chip { padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
 .btn.chip.activa { background: var(--verde); border-color: var(--verde); color: #fff; }
-label#btn-agregar-balance { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; -webkit-user-select: none; user-select: none; }
+label#btn-agregar-balance { cursor: pointer; -webkit-user-select: none; user-select: none; }
+/* Los botones de la barra de Saldos (Agregar / Borrar) con el mismo alto y relleno */
+#sec-saldos .acciones > .btn { min-height: 46px; padding: 10px 16px; line-height: 1.2; }
 .excel-grid { overflow: auto; max-height: 70vh; border: 1px solid var(--borde); border-radius: 8px; }
 .excel-grid table { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
 .excel-grid td { border: 1px solid #c9cfc6; padding: 3px 6px; min-width: 40px; }
