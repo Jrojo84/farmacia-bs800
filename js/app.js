@@ -2054,6 +2054,60 @@ async function reestablecerTodo() {
   }
 }
 
+/** Devuelve el HTML de la tabla de saldo de una hoja (reutilizado en Saldos y Movimientos). */
+function tablaSaldoHTML(h, q = "") {
+  const nq = norm(String(q).trim());
+  const hoy = new Date().toISOString().slice(0, 10);
+  const cuerpo = h.cats.map((c) => {
+    const items = c.items.filter((it) => !nq || norm(`${it.desc} ${it.carac} ${it.um} ${it.docE} ${it.docS}`).includes(nq));
+    if (!items.length) return "";
+    return `<tr class="cat"><td colspan="11">${esc(c.nombre)} <small>${items.length}</small></td></tr>` + items.map((it) => {
+      const vencido = it.venc.iso && it.venc.iso < hoy;
+      return `<tr>
+        <td class="num n">${esc(it.n)}</td>
+        <td class="nombre">${resaltar(it.desc, q)}</td>
+        <td>${esc(it.carac)}</td>
+        <td>${esc(it.um)}</td>
+        <td class="${vencido ? "vencido" : ""}">${esc(it.venc.texto)}${vencido ? "<small>vencido</small>" : ""}</td>
+        <td class="num">${celNum(it.ant)}</td>
+        <td class="doc">${esc(it.docE)}</td>
+        <td class="num ing">${celNum(it.cantE)}</td>
+        <td class="doc">${esc(it.docS)}</td>
+        <td class="num des">${celNum(it.cantS)}</td>
+        <td class="num stock${it.saldo === 0 ? " bajo" : ""}">${celNum(it.saldo)}</td>
+      </tr>`;
+    }).join("");
+  }).join("");
+  return cuerpo ? `<div class="tabla-wrap"><table class="tabla saldos">
+      <thead>
+        <tr><th rowspan="2">N°</th><th rowspan="2">Descripción artículo</th><th rowspan="2">Características</th><th rowspan="2">U/M</th>
+          <th rowspan="2">Fec/Ven</th><th class="num">Saldo ant.</th><th colspan="2" class="centro">Entrada</th><th colspan="2" class="centro">Salida</th><th rowspan="2" class="num">Saldo</th></tr>
+        <tr><th class="num">Cant</th><th>Doc N°</th><th class="num">Cant</th><th>Doc N°</th><th class="num">Cant</th></tr>
+      </thead>
+      <tbody>${cuerpo}</tbody>
+    </table></div>` : `<p class="vacio">Sin resultados</p>`;
+}
+
+/** Panel de SALDO por mes dentro de Movimientos (lo ven todos los usuarios). */
+async function pintarSaldoMovimientos() {
+  const panel = $("mov-saldo");
+  panel.classList.toggle("oculto", !balances.length);
+  if (!balances.length) { $("saldo-vista").innerHTML = ""; return; }
+  const sel = $("saldo-mes");
+  const ops = balances.map((b) => `<option value="${b.id}">${esc(b.mes || periodoNombre(b.periodo))}</option>`).join("");
+  if (sel.dataset.ops !== ops) { sel.innerHTML = ops; sel.dataset.ops = ops; }
+  if (!balances.find((b) => b.id === sel.value)) sel.value = balances.at(-1).id; // por defecto, el último mes
+  const b = balances.find((x) => x.id === sel.value);
+  $("saldo-vista").innerHTML = `<p class="vacio">Cargando ${esc(b.mes || periodoNombre(b.periodo))}…</p>`;
+  try {
+    if (!window.XLSX) await cargarScript(LIB_XLSX);
+    const wb = XLSX.read(base64ABytes(b.b64), { type: "array" });
+    const hs = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
+    const h = hs.find((x) => x.periodo === b.periodo) || hs[0];
+    $("saldo-vista").innerHTML = (h ? `<p class="nota">📄 ${esc(h.titulo || b.mes || "")}</p>` + tablaSaldoHTML(h) : `<p class="vacio">Sin datos</p>`);
+  } catch { $("saldo-vista").innerHTML = `<p class="vacio">No se pudo abrir el mes.</p>`; }
+}
+
 function pintarSaldos() {
   const abierto = vista.id && balances.find((b) => b.id === vista.id);
   $("btn-cargar").classList.toggle("oculto", !(estado.usuario?.admin && balances.length));
@@ -2085,39 +2139,10 @@ function pintarSaldos() {
   $("saldos-hojas").innerHTML = vista.hojas.length > 1 ? vista.hojas.map((h, i) =>
     `<button class="btn chip${i === vista.hoja ? " activa" : ""}" data-hoja="${i}">${esc(h.nombre.toUpperCase())}</button>`).join("") : "";
   const h = vista.hojas[vista.hoja];
-  const q = norm($("buscar-saldos").value.trim());
-  const hoy = new Date().toISOString().slice(0, 10);
-  const cuerpo = h.cats.map((c) => {
-    const items = c.items.filter((it) => !q || norm(`${it.desc} ${it.carac} ${it.um} ${it.docE} ${it.docS}`).includes(q));
-    if (!items.length) return "";
-    return `<tr class="cat"><td colspan="11">${esc(c.nombre)} <small>${items.length}</small></td></tr>` + items.map((it) => {
-      const vencido = it.venc.iso && it.venc.iso < hoy;
-      return `<tr>
-        <td class="num n">${esc(it.n)}</td>
-        <td class="nombre">${resaltar(it.desc, $("buscar-saldos").value)}</td>
-        <td>${esc(it.carac)}</td>
-        <td>${esc(it.um)}</td>
-        <td class="${vencido ? "vencido" : ""}">${esc(it.venc.texto)}${vencido ? "<small>vencido</small>" : ""}</td>
-        <td class="num">${celNum(it.ant)}</td>
-        <td class="doc">${esc(it.docE)}</td>
-        <td class="num ing">${celNum(it.cantE)}</td>
-        <td class="doc">${esc(it.docS)}</td>
-        <td class="num des">${celNum(it.cantS)}</td>
-        <td class="num stock${it.saldo === 0 ? " bajo" : ""}">${celNum(it.saldo)}</td>
-      </tr>`;
-    }).join("");
-  }).join("");
   cont.innerHTML = `
     <p class="nota">📄 ${esc(h.titulo || vista.mes)}</p>
     ${h.aviso ? `<p class="nota aviso-saldos">⚠️ ${esc(h.aviso)}</p>` : ""}
-    ${cuerpo ? `<div class="tabla-wrap"><table class="tabla saldos">
-      <thead>
-        <tr><th rowspan="2">N°</th><th rowspan="2">Descripción artículo</th><th rowspan="2">Características</th><th rowspan="2">U/M</th>
-          <th rowspan="2">Fec/Ven</th><th class="num">Saldo ant.</th><th colspan="2" class="centro">Entrada</th><th colspan="2" class="centro">Salida</th><th rowspan="2" class="num">Saldo</th></tr>
-        <tr><th class="num">Cant</th><th>Doc N°</th><th class="num">Cant</th><th>Doc N°</th><th class="num">Cant</th></tr>
-      </thead>
-      <tbody>${cuerpo}</tbody>
-    </table></div>` : `<p class="vacio">Sin resultados</p>`}`;
+    ${tablaSaldoHTML(h, $("buscar-saldos").value)}`;
 }
 
 // El botón "Agregar nuevo balance" es una <label for="input-saldos">: abre el selector de archivo de forma nativa (funciona también en iPhone).
@@ -2144,6 +2169,9 @@ $("saldos-hojas").addEventListener("click", (e) => {
   vista.hoja = +b.dataset.hoja;
   pintarSaldos();
 });
+$("saldo-mes").addEventListener("change", pintarSaldoMovimientos);
+$("saldo-excel").addEventListener("click", () => { const id = $("saldo-mes").value; if (id) descargarBalance(id); });
+$("saldo-pdf").addEventListener("click", () => { const id = $("saldo-mes").value; if (id) descargarBalancePDF(id); });
 $("buscar-saldos").addEventListener("input", pintarSaldos);
 
 // =====================================================================
@@ -2163,6 +2191,7 @@ function irA(sec) {
   document.querySelectorAll(".seccion").forEach((s) => s.classList.toggle("oculto", s.id !== `sec-${sec}`));
   document.querySelectorAll(".menu button").forEach((b) => b.classList.toggle("activa", b.dataset.sec === sec));
   PINTAR[sec]();
+  if (sec === "movimientos") pintarSaldoMovimientos();
   window.scrollTo(0, 0);
 }
 document.querySelector(".menu").addEventListener("click", (e) => {
@@ -2299,6 +2328,7 @@ onAuthStateChanged(auth, async (user) => {
       balances = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.periodo || a.id).localeCompare(b.periodo || b.id));
       if (vista.id && !balances.find((b) => b.id === vista.id)) { vista.id = null; vista.hojas = []; }
       if (estado.seccion === "saldos") pintarSaldos();
+      else if (estado.seccion === "movimientos") pintarSaldoMovimientos();
     }),
     onSnapshot(ref, (s) => {
       if (s.exists() && !s.data().activo) return signOut(auth);

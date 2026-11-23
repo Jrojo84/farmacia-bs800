@@ -136,6 +136,15 @@
       <!-- MOVIMIENTOS -->
       <div id="sec-movimientos" class="seccion oculto">
         <h2 class="titulo-sec">Movimientos</h2>
+        <div id="mov-saldo" class="mov-saldo oculto">
+          <h3 class="sub-sec">Saldo por mes</h3>
+          <div class="barra-busqueda fila">
+            <select id="saldo-mes" aria-label="Mes del saldo"></select>
+            <button id="saldo-excel" class="btn">⬇ Excel</button>
+            <button id="saldo-pdf" class="btn primario">⬇ PDF</button>
+          </div>
+          <div id="saldo-vista"></div>
+        </div>
         <div class="barra-busqueda fila">
           <select id="mov-periodo" aria-label="Mes"></select>
           <input id="buscar-mov" class="buscar" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Medicamento, paciente, DNI, acta…">
