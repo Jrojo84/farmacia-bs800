@@ -2310,7 +2310,7 @@ onAuthStateChanged(auth, async (user) => {
       if (estado.seccion === "usuarios") pintarUsuarios();
     }));
   }
-  irA("despacho");
+  irA(admin ? "despacho" : "control");
   if (perfil.claveTemporal) pedirNuevaClave(user);
 });
 
