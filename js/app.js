@@ -1771,7 +1771,10 @@ function leerHojaSaldo(nombre, ws) {
   const mesHoja = MESES_L.find((m) => norm(nombre).toUpperCase().includes(m));
   const mesTitulo = MESES_L.find((m) => norm(titulo).toUpperCase().includes(m));
   const aviso = mesHoja && mesTitulo && mesHoja !== mesTitulo ? `La hoja se llama "${nombre}" pero su título dice ${mesTitulo}. Revisa si es la hoja correcta.` : "";
-  return { nombre, titulo, aviso, cats };
+  const NUM_MES = { ENERO: 1, FEBRERO: 2, MARZO: 3, ABRIL: 4, MAYO: 5, JUNIO: 6, JULIO: 7, AGOSTO: 8, SETIEMBRE: 9, SEPTIEMBRE: 9, OCTUBRE: 10, NOVIEMBRE: 11, DICIEMBRE: 12 };
+  const anio = (String(titulo).match(/20\d\d/) || [])[0];
+  const periodo = mesTitulo && anio ? `${anio}-${String(NUM_MES[mesTitulo]).padStart(2, "0")}` : "";
+  return { nombre, titulo, aviso, cats, periodo };
 }
 
 const celNum = (v) => (v === null || Number.isNaN(v) ? "" : v);
@@ -1903,31 +1906,82 @@ async function cargarBalanceAlSistema(id) {
       hojas = wb.SheetNames.map((n) => leerHojaSaldo(n, wb.Sheets[n])).filter((h) => h && h.cats.length);
     }
   } catch { return toast("No se pudo leer el balance.", true); }
-  if (!hojas.length) return toast("El balance no tiene meses legibles.", true);
+  hojas = hojas.filter((h) => h.periodo); // solo meses con período reconocido
+  if (!hojas.length) return toast("No pude reconocer los meses del balance (el título debe decir, p. ej., ABRIL 2026).", true);
 
-  const mes = hojas.at(-1);                        // el último mes del archivo
-  const lista = mes.cats.flatMap((c) => c.items.map((it) => {
-    const nombre = [it.desc, it.carac].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-    const cant = Math.max(0, Number(it.saldo) || 0);
-    return { nombre, unidad: it.um || "", presentacion: "", via: "", categoria: c.nombre || "",
-      lotes: cant > 0 ? [{ venc: it.venc.iso || "", cant }] : [], stock: cant };
-  })).filter((d) => d.nombre);
-  if (!lista.length) return toast("No se encontraron medicamentos en el último mes.", true);
+  const nom = (it) => [it.desc, it.carac].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  // Catálogo = todos los artículos de todos los meses; atributos y stock del ÚLTIMO mes donde aparece cada uno.
+  const cat = new Map();
+  for (const h of hojas) for (const c of h.cats) for (const it of c.items) {
+    const nombre = nom(it); if (!nombre) continue;
+    const stock = Math.max(0, Number(it.saldo) || 0);
+    cat.set(norm(nombre), { nombre, unidad: it.um || "", categoria: c.nombre || "", venc: it.venc.iso || "", stock });
+  }
+  if (!cat.size) return toast("No se encontraron medicamentos en el balance.", true);
 
-  const actuales = estado.meds.length;
-  if (!confirm(`Vas a CARGAR ${lista.length} medicamentos con el stock de ${mes.nombre.toUpperCase()}.\n\n` +
-    `Esto BORRA los ${actuales} medicamento(s) que hay ahora y los reemplaza. El historial de movimientos no se toca.\n\n¿Continuar?`)) return;
+  // Movimientos por mes: una entrada y/o una salida por artículo donde haya cantidad.
+  const movsPlan = [];
+  for (const h of hojas) {
+    const [y, m] = h.periodo.split("-").map(Number);
+    const fecha = Timestamp.fromDate(new Date(y, m - 1, 15, 12));
+    for (const c of h.cats) for (const it of c.items) {
+      const nombre = nom(it); if (!nombre) continue;
+      const base = { key: norm(nombre), nombre, unidad: it.um || "", periodo: h.periodo, fecha, venc: it.venc.iso || "", ant: Number(it.ant) || 0, saldo: Number(it.saldo) || 0 };
+      if ((it.cantE || 0) > 0) movsPlan.push({ ...base, tipo: "ingreso", cant: it.cantE, doc: it.docE });
+      if ((it.cantS || 0) > 0) movsPlan.push({ ...base, tipo: "despacho", cant: it.cantS, doc: it.docS });
+    }
+  }
+
+  const ultimo = hojas.at(-1).nombre.toUpperCase();
+  if (!confirm(`Vas a RELLENAR el sistema con el balance completo:\n\n` +
+    `• ${cat.size} medicamentos (stock = saldo del último mes, ${ultimo})\n` +
+    `• ${movsPlan.length} movimientos repartidos en ${hojas.length} meses\n\n` +
+    `Esto BORRA TODO lo que haya ahora (medicamentos y movimientos) y lo reemplaza. Es para la carga inicial.\n\n¿Continuar?`)) return;
 
   try {
-    toast("Cargando medicamentos al sistema… espera unos segundos.");
+    toast("Cargando el balance al sistema… puede tardar un momento.");
+    const u = estado.usuario;
     let batch = writeBatch(db), ops = 0;
-    const paso = async () => { if (ops >= 450) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+    const paso = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+
+    // 1) Borrar todo lo actual
     for (const m of estado.meds) { batch.delete(doc(db, "medicamentos", m.id)); ops++; await paso(); }
-    for (const d of lista) { batch.set(doc(collection(db, "medicamentos")), { ...d, creado: serverTimestamp(), actualizado: serverTimestamp() }); ops++; await paso(); }
+    for (const mv of estado.movs) { batch.delete(doc(db, "movimientos", mv.id)); ops++; await paso(); }
+
+    // 2) Crear los medicamentos y guardar su id por nombre
+    const idPorKey = new Map();
+    for (const [key, d] of cat) {
+      const ref = doc(collection(db, "medicamentos"));
+      idPorKey.set(key, ref.id);
+      batch.set(ref, {
+        nombre: d.nombre, unidad: d.unidad, presentacion: "", via: "", categoria: d.categoria,
+        lotes: d.stock > 0 ? [{ venc: d.venc, cant: d.stock }] : [], stock: d.stock,
+        creado: serverTimestamp(), actualizado: serverTimestamp(),
+      });
+      ops++; await paso();
+    }
+
+    // 3) Crear los movimientos de cada mes
+    for (const mv of movsPlan) {
+      const medId = idPorKey.get(mv.key); if (!medId) continue;
+      const ref = doc(collection(db, "movimientos"));
+      batch.set(ref, {
+        tipo: mv.tipo, periodo: mv.periodo, fecha: mv.fecha, medId,
+        nombre: mv.nombre, unidad: mv.unidad, presentacion: "",
+        cantidad: mv.cant, lotes: [{ venc: mv.venc, cant: mv.cant }],
+        stockAnterior: mv.ant, stockNuevo: mv.saldo,
+        uid: u.uid, usuarioNombre: u.nombre, usuarioDni: u.dni || "",
+        acta: mv.tipo === "ingreso" ? (mv.doc || "") : "", pacienteDni: "", pacienteNombre: "",
+        observacion: `Carga inicial${mv.doc && mv.tipo !== "ingreso" ? ` · ${mv.doc}` : ""}`,
+      });
+      ops++; await paso();
+    }
     if (ops) await batch.commit();
-    exito(`Se cargaron ${lista.length} medicamentos (stock de ${mes.nombre.toUpperCase()}) \u2714`);
+    exito(`Listo: ${cat.size} medicamentos y ${movsPlan.length} movimientos cargados \u2714`);
   } catch (er) {
-    toast(er.code === "permission-denied" ? "Solo el administrador puede cargar medicamentos (¿publicaste las reglas?)." : ("No se pudo cargar. " + (er.message || "")), true);
+    toast(er.code === "permission-denied"
+      ? "Permiso denegado. Revisa que publicaste las reglas de Firestore (incluida la línea que deja al admin borrar movimientos)."
+      : ("No se pudo cargar. " + (er.message || "")), true);
   }
 }
 
